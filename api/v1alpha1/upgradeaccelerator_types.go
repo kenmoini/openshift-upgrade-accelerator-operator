@@ -28,14 +28,50 @@ type UpgradeAcceleratorSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of UpgradeAccelerator. Edit upgradeaccelerator_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// State indicates whether the upgrade accelerator is enabled or disabled.
+	// +kubebuilder:default:=true
+	// +optional
+	State bool `json:"state,omitempty"`
+	// Selector defines the selection criteria for nodes to which the upgrade accelerator applies.
+	// +optional
+	Selector Selector `json:"selector,omitempty"`
+	// Prime indicates whether to pull images to a single node first before rolling out to other nodes.
+	// +kubebuilder:default:=true
+	// +optional
+	Prime bool `json:"prime,omitempty"`
+	// Parallelism defines the number of nodes to upgrade in parallel.
+	// If set to 0, all nodes will be upgraded in parallel.
+	// +kubebuilder:default:=0
+	// +optional
+	Parallelism int32 `json:"parallelism,omitempty"`
+}
+
+// Selector defines the selection criteria for nodes to which the upgrade accelerator applies.
+type Selector struct {
+	// NodeSelector is a selector which must be true for the pod to fit on a node.
+	NodeSelector *metav1.LabelSelector `json:"nodeSelector,omitempty"`
+	// MachineConfigPools is a list of MachineConfigPools to target.
+	MachineConfigPools []string `json:"machineConfigPools,omitempty"`
 }
 
 // UpgradeAcceleratorStatus defines the observed state of UpgradeAccelerator.
 type UpgradeAcceleratorStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	// CurrentVersion indicates the current version of OpenShift.  This is derived from the machine-config ClusterOperator.
+	CurrentVersion string `json:"currentVersion"`
+	// TargetVersion indicates the target version of OpenShift that is reported by the ClusterVersion CR.
+	TargetVersion string `json:"targetVersion"`
+	// Conditions represents the latest available observations of the UpgradeAccelerator's current state.
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// NodeSelected is a list of nodes that match the selector criteria.
+	NodeSelected []string `json:"nodesSelected,omitempty"`
+	// NodesPreheated is a list of nodes that have been preheated with the targetVersion release images.
+	NodesPreheated []string `json:"nodesPreheated,omitempty"`
+	// NodesWarming is a list of nodes that are currently being preheated with the targetVersion release images.
+	NodesWarming []string `json:"nodesWarming,omitempty"`
+	// NodesWaiting is a list of nodes that are waiting to be preheated with the targetVersion release images.
+	NodesWaiting []string `json:"nodesWaiting,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -47,8 +83,8 @@ type UpgradeAccelerator struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   UpgradeAcceleratorSpec   `json:"spec,omitempty"`
-	Status UpgradeAcceleratorStatus `json:"status,omitempty"`
+	Spec   UpgradeAcceleratorSpec   `json:"spec"`
+	Status UpgradeAcceleratorStatus `json:"status"`
 }
 
 // +kubebuilder:object:root=true
