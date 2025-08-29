@@ -11,4 +11,6 @@ git push -u origin main
 
 GOPROXY=direct GOSUMDB=off operator-sdk create api --group openshift --version v1alpha1 --kind UpgradeAccelerator --namespaced=false --resource --controller
 
+make generate
+make manifests
 ```
