@@ -87,7 +87,7 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 			}
 
 			// If there is no selector defined, then all nodes are targeted
-			if uaSpec.Selector.NodeSelector == nil && (uaSpec.Selector.MachineConfigPools == nil || len(uaSpec.Selector.MachineConfigPools) == 0) {
+			if uaSpec.Selector.NodeSelector == nil && len(uaSpec.Selector.MachineConfigPools) == 0 {
 				logger.Info("No selectors defined, targeting all nodes")
 				for _, node := range nodes.Items {
 					targetedNodes = append(targetedNodes, node.Name)
@@ -96,7 +96,7 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 			// ==========================================================================================
 			// Check if the spec has a machineConfigPool selector defined
-			if uaSpec.Selector.MachineConfigPools != nil && len(uaSpec.Selector.MachineConfigPools) > 0 {
+			if len(uaSpec.Selector.MachineConfigPools) > 0 {
 				logger.Info("MachineConfigPools selector found", "pools", uaSpec.Selector.MachineConfigPools)
 				// Get the list of MachineConfigPools
 				listOpts := []client.ListOption{}
