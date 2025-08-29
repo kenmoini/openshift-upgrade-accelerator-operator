@@ -9,6 +9,6 @@ git branch -M main
 git remote add origin git@github.com:kenmoini/openshift-upgrade-accelerator-operator.git
 git push -u origin main
 
-operator-sdk create api --group openshift --version v1alpha1 --kind UpgradeAccelerator --namespaced=false --resource --controller
+GOPROXY=direct GOSUMDB=off operator-sdk create api --group openshift --version v1alpha1 --kind UpgradeAccelerator --namespaced=false --resource --controller
 
 ```

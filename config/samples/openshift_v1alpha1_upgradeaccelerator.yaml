@@ -1,0 +1,9 @@
+apiVersion: openshift.kemo.dev/v1alpha1
+kind: UpgradeAccelerator
+metadata:
+  labels:
+    app.kubernetes.io/name: openshift-upgrade-accelerator-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: upgradeaccelerator-sample
+spec:
+  # TODO(user): Add fields here
