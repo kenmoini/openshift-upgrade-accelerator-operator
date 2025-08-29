@@ -13,4 +13,8 @@ GOPROXY=direct GOSUMDB=off operator-sdk create api --group openshift --version v
 
 make generate
 make manifests
+make lint
+
+make generate manifests build install run
+make build run
 ```

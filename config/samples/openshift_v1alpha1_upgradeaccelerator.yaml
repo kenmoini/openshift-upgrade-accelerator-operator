@@ -6,4 +6,20 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: upgradeaccelerator-sample
 spec:
-  # TODO(user): Add fields here
+  #state: enabled
+  #prime: true
+  #parallelism: 0
+  # Selector limits the nodes that the UpgradeAccelerator can target
+  # If not specified, all nodes are eligible
+  # If a NodeSelector is specified, only nodes matching the selector will be eligible
+  # If a MachineConfigPool list is specified, only nodes in the specified pools will be eligible
+  # If both are specified, both must match
+  # Invalid MachineConfigPools will be ignored
+  selector:
+    nodeSelector:
+      matchLabels:
+        foo: bar
+    machineConfigPools:
+      - master
+      - worker
+      - notarealmcp

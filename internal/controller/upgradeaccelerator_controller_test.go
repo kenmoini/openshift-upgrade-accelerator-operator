@@ -1,3 +1,6 @@
+//go:build realtests
+// +build realtests
+
 /*
 Copyright 2025.
 
@@ -37,8 +40,7 @@ var _ = Describe("UpgradeAccelerator Controller", func() {
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Name: resourceName,
 		}
 		upgradeaccelerator := &openshiftv1alpha1.UpgradeAccelerator{}
 

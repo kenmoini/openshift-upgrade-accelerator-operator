@@ -29,9 +29,9 @@ type UpgradeAcceleratorSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// State indicates whether the upgrade accelerator is enabled or disabled.
-	// +kubebuilder:default:=true
+	// +kubebuilder:default:=enabled
 	// +optional
-	State bool `json:"state,omitempty"`
+	State string `json:"state,omitempty"`
 	// Selector defines the selection criteria for nodes to which the upgrade accelerator applies.
 	// +optional
 	Selector Selector `json:"selector,omitempty"`
@@ -83,8 +83,8 @@ type UpgradeAccelerator struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   UpgradeAcceleratorSpec   `json:"spec"`
-	Status UpgradeAcceleratorStatus `json:"status"`
+	Spec   UpgradeAcceleratorSpec   `json:"spec,omitempty"`
+	Status UpgradeAcceleratorStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

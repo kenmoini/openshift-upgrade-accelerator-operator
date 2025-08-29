@@ -5,6 +5,30 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - config.openshift.io
+  resources:
+  - infrastructures
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - machineconfiguration.openshift.io
+  resources:
+  - machineconfigpools
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - openshift.kemo.dev
   resources:
   - upgradeaccelerators
