@@ -19,12 +19,16 @@ package controller
 import (
 	"context"
 	"slices"
+	"strings"
 
 	"dario.cat/mergo"
 	machineconfigv1 "github.com/openshift/api/machineconfiguration/v1"
+
+	configv1 "github.com/openshift/api/config/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -57,21 +61,32 @@ type UpgradeAcceleratorReconciler struct {
 func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
+	// Get preliminary assets
+	clusterInfrastructureType, err := getOpenShiftInfrastructureType(ctx, req, r.Client)
+	if err != nil {
+		logger.Error(err, "Failed to get OpenShift infrastructure type")
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("OpenShift Infrastructure Type", "type", clusterInfrastructureType)
+
 	upgradeAccelerator := &openshiftv1alpha1.UpgradeAccelerator{}
 	logger.Info("Reconciling UpgradeAccelerator", "NamespacedName", req.NamespacedName)
 	if err := r.Get(ctx, req.NamespacedName, upgradeAccelerator); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	} else {
 		logger.Info("Successfully fetched UpgradeAccelerator", "NamespacedName", req.NamespacedName)
-		logger.Info("Spec", "spec", upgradeAccelerator.Spec)
+		//logger.Info("Spec", "spec", upgradeAccelerator.Spec)
 		uaSpec := upgradeAccelerator.Spec
 
 		validMachineConfigPools := []string{}
 		validMachineConfigPoolSelectors := make(map[string]*metav1.LabelSelector)
 		targetedNodes := []string{}
 
-		// Check if this is enabled or not
-		if uaSpec.State == "disabled" {
+		// ============================================================================================
+		// State Check: Check if this UpdateAccelerator is enabled or not
+		// ============================================================================================
+		if strings.ToLower(uaSpec.State) == "disabled" {
 			logger.Info("UpgradeAccelerator is disabled, finished")
 			return ctrl.Result{}, nil
 		} else {
@@ -196,6 +211,56 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// getOpenShiftInfrastructureType retrieves the OpenShift infrastructure type.
+// This is used to filter out any unnecessary images.
+func getOpenShiftInfrastructureType(ctx context.Context, req ctrl.Request, client client.Client) (string, error) {
+	infrastructure := &configv1.Infrastructure{}
+	if err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, infrastructure); err != nil {
+		return "", err
+	}
+	return string(infrastructure.Status.PlatformStatus.Type), nil
+}
+
+// filterOpenShiftReleaseImages filters the OpenShift release images based on the infrastructure type.
+func filterOpenShiftReleaseImages(images []string, infrastructureType string) []string {
+	var filteredImages []string
+	var filterMatch string
+
+	// Switch between the infrastructure types and set the filter for each
+	switch infrastructureType {
+	case "None", "BareMetal":
+		// Removal of aws- azure- gcp- ibm- ibmcloud- libvirt- nutanix- openstack- ovirt- powervs- vsphere-
+		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
+	case "AWS":
+		filterMatch = "(azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
+	case "Azure":
+		filterMatch = "(aws-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
+	case "GCP":
+		filterMatch = "(aws-|azure-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
+	case "IBMCloud":
+		filterMatch = "(aws-|azure-|gcp-|ibm-|libvirt-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
+	case "Libvirt":
+		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
+	case "Nutanix":
+		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|openstack-|ovirt-|powervs-|vsphere-)"
+	case "OpenStack":
+		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|ovirt-|powervs-|vsphere-)"
+	case "oVirt":
+		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|powervs-|vsphere-)"
+	case "PowerVS":
+		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|vsphere-)"
+	case "VSphere":
+		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|powervs-)"
+	}
+
+	for _, image := range images {
+		if strings.Contains(image, filterMatch) {
+			filteredImages = append(filteredImages, image)
+		}
+	}
+	return filteredImages
 }
 
 // SetupWithManager sets up the controller with the Manager.

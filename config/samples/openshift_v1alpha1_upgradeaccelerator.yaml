@@ -6,8 +6,15 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: upgradeaccelerator-sample
 spec:
+  # state by default is set to enabled if not specified. enabled \ disabled
   #state: enabled
+  # prime by default is set to true if not specified. true | false
+  # Priming the upgrade will cause the system to pull the release images on a single node first
+  # This aids in reducing turbulence when using a proxy pull-through cache for container images
+  # Once the release images are pulled to the first node, the system will progress with as many as specified in parallelism
   #prime: true
+  # parallelism defines the number of nodes that can be upgraded in parallel
+  # By default it is set to 0 which pull on all nodes at once
   #parallelism: 0
   # Selector limits the nodes that the UpgradeAccelerator can target
   # If not specified, all nodes are eligible
@@ -19,6 +26,7 @@ spec:
     nodeSelector:
       matchLabels:
         foo: bar
+        nvidia.com/gpu.count: '0'
     machineConfigPools:
       - master
       - worker

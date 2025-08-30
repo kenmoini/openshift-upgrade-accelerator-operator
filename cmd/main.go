@@ -39,6 +39,7 @@ import (
 
 	openshiftv1alpha1 "github.com/kenmoini/openshift-upgrade-accelerator-operator/api/v1alpha1"
 	"github.com/kenmoini/openshift-upgrade-accelerator-operator/internal/controller"
+	configv1 "github.com/openshift/api/config/v1"
 	machineconfigv1 "github.com/openshift/api/machineconfiguration/v1"
 	// +kubebuilder:scaffold:imports
 )
@@ -53,6 +54,7 @@ func init() {
 
 	utilruntime.Must(openshiftv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(machineconfigv1.AddToScheme(scheme))
+	utilruntime.Must(configv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
