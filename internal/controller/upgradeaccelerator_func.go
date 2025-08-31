@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	openshiftv1alpha1 "github.com/kenmoini/openshift-upgrade-accelerator-operator/api/v1alpha1"
 	configv1 "github.com/openshift/api/config/v1"
@@ -120,46 +119,6 @@ func hasMachineConfigClusterOperatorChanged(o *configv1.ClusterOperator, n *conf
 		}
 	}
 	return false
-}
-
-// filterOpenShiftReleaseImages filters the OpenShift release images based on the infrastructure type.
-func filterOpenShiftReleaseImages(images []string, infrastructureType string) []string {
-	var filteredImages []string
-	var filterMatch string
-
-	// Switch between the infrastructure types and set the filter for each
-	switch infrastructureType {
-	case "None", "BareMetal":
-		// Removal of aws- azure- gcp- ibm- ibmcloud- libvirt- nutanix- openstack- ovirt- powervs- vsphere-
-		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
-	case "AWS":
-		filterMatch = "(azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
-	case "Azure":
-		filterMatch = "(aws-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
-	case "GCP":
-		filterMatch = "(aws-|azure-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
-	case "IBMCloud":
-		filterMatch = "(aws-|azure-|gcp-|ibm-|libvirt-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
-	case "Libvirt":
-		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
-	case "Nutanix":
-		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|openstack-|ovirt-|powervs-|vsphere-)"
-	case "OpenStack":
-		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|ovirt-|powervs-|vsphere-)"
-	case "oVirt":
-		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|powervs-|vsphere-)"
-	case "PowerVS":
-		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|vsphere-)"
-	case "VSphere":
-		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|powervs-)"
-	}
-
-	for _, image := range images {
-		if strings.Contains(image, filterMatch) {
-			filteredImages = append(filteredImages, image)
-		}
-	}
-	return filteredImages
 }
 
 // getOpenShiftInfrastructureType retrieves the OpenShift infrastructure type.
