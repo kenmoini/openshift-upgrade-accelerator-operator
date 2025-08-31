@@ -5,17 +5,26 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	UpgradeAcceleratorDefaultNamespace     = "openshift-upgrade-accelerator"
+	UpgradeAcceleratorDefaultParallelism   = 5
+	UpgradeAcceleratorDefaultRandomWaitMin = 10
+	UpgradeAcceleratorDefaultRandomWaitMax = 30
+)
+
 // UpgradeAcceleratorReconciler reconciles a UpgradeAccelerator object
 type UpgradeAcceleratorReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
+// ReleaseImageTags represents the release image tags used for upgrades
 type ReleaseImageTags struct {
 	Name string `json:"name"`
 	From string `json:"from"`
 }
 
+// OpenShiftClusterVersionState represents the state of the determined OpenShift versions
 type OpenShiftClusterVersionState struct {
 	// CurrentVersion is derived from the machine-config ClusterOperator
 	CurrentVersion string `json:"currentVersion"`

@@ -6,11 +6,47 @@ import (
 
 	openshiftv1alpha1 "github.com/kenmoini/openshift-upgrade-accelerator-operator/api/v1alpha1"
 	configv1 "github.com/openshift/api/config/v1"
+	corev1 "k8s.io/api/core/v1"
+	kapierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+// createOperatorNamespace creates the namespace for the Operator to deploy Jobs into
+func (reconciler *UpgradeAcceleratorReconciler) createOperatorNamespace(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator) error {
+	targetNamespace := UpgradeAcceleratorDefaultNamespace
+	// Check if the UpgradeAccelerator has any overrides for the namespace
+	if upgradeAccelerator.Spec.Config.Scheduling.Namespace != "" {
+		targetNamespace = upgradeAccelerator.Spec.Config.Scheduling.Namespace
+	}
+
+	// Set some basic labels
+	labels := map[string]string{
+		"app": "upgrade-accelerator",
+	}
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   targetNamespace,
+			Labels: labels,
+		},
+	}
+	// Check if the namespace exists already
+	if err := reconciler.Get(ctx, types.NamespacedName{Name: targetNamespace}, namespace); err != nil {
+		if kapierrors.IsNotFound(err) {
+			// Namespace does not exist, create it
+			if err := reconciler.Create(ctx, namespace); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	return nil
+}
 
 func (reconciler *UpgradeAcceleratorReconciler) getCurrentVersion(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator) (string, error) {
 	// Get the machine-config ClusterOperator
