@@ -16,8 +16,8 @@ import (
 )
 
 // createOperatorNamespace creates the namespace for the Operator to deploy Jobs into
-func (reconciler *UpgradeAcceleratorReconciler) createOperatorNamespace(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator) error {
-	targetNamespace := UpgradeAcceleratorDefaultNamespace
+func (reconciler *UpgradeAcceleratorReconciler) createOperatorNamespace(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator) (targetNamespace string, err error) {
+	targetNamespace = UpgradeAcceleratorDefaultNamespace
 	// Check if the UpgradeAccelerator has any overrides for the namespace
 	if upgradeAccelerator.Spec.Config.Scheduling.Namespace != "" {
 		targetNamespace = upgradeAccelerator.Spec.Config.Scheduling.Namespace
@@ -35,17 +35,17 @@ func (reconciler *UpgradeAcceleratorReconciler) createOperatorNamespace(ctx cont
 		},
 	}
 	// Check if the namespace exists already
-	if err := reconciler.Get(ctx, types.NamespacedName{Name: targetNamespace}, namespace); err != nil {
+	if err = reconciler.Get(ctx, types.NamespacedName{Name: targetNamespace}, namespace); err != nil {
 		if kapierrors.IsNotFound(err) {
 			// Namespace does not exist, create it
 			if err := reconciler.Create(ctx, namespace); err != nil {
-				return err
+				return "", err
 			}
 		} else {
-			return err
+			return "", err
 		}
 	}
-	return nil
+	return targetNamespace, nil
 }
 
 func (reconciler *UpgradeAcceleratorReconciler) getCurrentVersion(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator) (string, error) {
@@ -99,20 +99,21 @@ func (reconciler *UpgradeAcceleratorReconciler) getClusterVersionState(ctx conte
 
 // hasClusterVersionChanged checks two instances of ClusterVersion and compares if some fields have changed
 func hasClusterVersionChanged(o *configv1.ClusterVersion, n *configv1.ClusterVersion) bool {
-	var oldSpec, newSpec configv1.ClusterVersionSpec
+	var oldStatus, newStatus configv1.ClusterVersionStatus
 	// Must check the state of the inputs otherwise may end up with a nil pointer dereference
-	if o != nil {
-		oldSpec = o.Spec
-	}
-	if n != nil {
-		newSpec = n.Spec
-	}
 	if o == nil || n == nil {
 		return false
 	}
-	if oldSpec.DesiredUpdate.Version != newSpec.DesiredUpdate.Version {
+	if o != nil {
+		oldStatus = o.Status
+	}
+	if n != nil {
+		newStatus = n.Status
+	}
+	// Check if the desired version has changed
+	if oldStatus.Desired.Version != newStatus.Desired.Version {
 		log := logf.FromContext(context.TODO())
-		log.Info("ClusterVersion has changed", "oldVersion", oldSpec.DesiredUpdate.Version, "newVersion", newSpec.DesiredUpdate.Version)
+		log.Info("ClusterVersion has changed", "oldVersion", oldStatus.Desired.Version, "newVersion", newStatus.Desired.Version)
 		return true
 	}
 	return false
@@ -122,14 +123,14 @@ func hasClusterVersionChanged(o *configv1.ClusterVersion, n *configv1.ClusterVer
 func hasMachineConfigClusterOperatorChanged(o *configv1.ClusterOperator, n *configv1.ClusterOperator) bool {
 	var oldStatus, newStatus configv1.ClusterOperatorStatus
 	// Must check the state of the inputs otherwise may end up with a nil pointer dereference
+	if o == nil || n == nil {
+		return false
+	}
 	if o != nil {
 		oldStatus = o.Status
 	}
 	if n != nil {
 		newStatus = n.Status
-	}
-	if o == nil || n == nil {
-		return false
 	}
 	// Check if this is the machine-config CO
 	if o.Name == "machine-config" {

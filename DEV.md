@@ -18,3 +18,21 @@ make lint
 make generate manifests build install run
 make build run
 ```
+
+```yaml=
+# Used when doing local testing
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: default-priv-test
+  namespace: openshift-upgrade-accelerator
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: openshift-upgrade-accelerator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: 'system:openshift:scc:privileged'
+```

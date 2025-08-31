@@ -22,11 +22,13 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"dario.cat/mergo"
 	machineconfigv1 "github.com/openshift/api/machineconfiguration/v1"
 
 	configv1 "github.com/openshift/api/config/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -45,10 +47,12 @@ import (
 // +kubebuilder:rbac:groups=config.openshift.io,resources=infrastructures,verbs=get;list;watch
 // +kubebuilder:rbac:groups=config.openshift.io,resources=clusteroperators,verbs=get;list;watch
 // +kubebuilder:rbac:groups=config.openshift.io,resources=clusterversions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=config.openshift.io,resources=proxies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=machineconfiguration.openshift.io,resources=machineconfigpools,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openshift.kemo.dev,resources=upgradeaccelerators,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openshift.kemo.dev,resources=upgradeaccelerators/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openshift.kemo.dev,resources=upgradeaccelerators/finalizers,verbs=update
+// +kubebuilder:rbac:groups=security.openshift.io,namespace=openshift-upgrade-accelerator,resources=securitycontextconstraints,verbs=get;list;watch;use,resourceNames=privileged
 // +kubebuilder:rbac:groups=core,namespace=openshift-upgrade-accelerator,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,namespace=openshift-upgrade-accelerator,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,namespace=openshift-upgrade-accelerator,resources=pods,verbs=get;list;watch;delete
@@ -68,12 +72,12 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 	upgradeAccelerator := &openshiftv1alpha1.UpgradeAccelerator{}
 	logger.Info("Reconciling UpgradeAccelerator", "NamespacedName", req.NamespacedName)
 	if err := r.Get(ctx, req.NamespacedName, upgradeAccelerator); err != nil {
-		return ctrl.Result{Requeue: false}, client.IgnoreNotFound(err)
+		return ctrl.Result{RequeueAfter: time.Second * 30}, client.IgnoreNotFound(err)
 	} else {
 		logger.Info("Successfully fetched UpgradeAccelerator", "NamespacedName", req.NamespacedName)
 		//logger.Info("Spec", "spec", upgradeAccelerator.Spec)
 		// ============================================================================================
-		// Base In Reconciler Variables
+		// Base In-Reconciler Variables
 		// ============================================================================================
 		uaSpec := upgradeAccelerator.Spec
 
@@ -82,51 +86,51 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 		targetedNodes := []string{}
 
 		// ============================================================================================
-		// Get preliminary assets
-		// ============================================================================================
-		// Cluster Infrastructure - Platform Type
-		clusterInfrastructureType, err := getOpenShiftInfrastructureType(ctx, req, r.Client)
-		if err != nil {
-			logger.Error(err, "Failed to get OpenShift infrastructure type")
-			_ = r.setConditionInfrastructureNotFound(ctx, upgradeAccelerator, err)
-			return ctrl.Result{Requeue: false}, err
-		}
-
-		logger.Info("OpenShift Infrastructure Type", "type", clusterInfrastructureType)
-
-		// Cluster Version State
-		clusterVersionState, err := r.getClusterVersionState(ctx, upgradeAccelerator)
-		if err != nil {
-			logger.Error(err, "Failed to get Cluster Version State")
-			return ctrl.Result{Requeue: false}, err
-		}
-		logger.Info("Cluster Version State", "state", clusterVersionState)
-
-		// Set the UpgradeAcceleratorStatus for the CurrentVersion and TargetVersion
-		upgradeAccelerator.Status.CurrentVersion = clusterVersionState.CurrentVersion
-		upgradeAccelerator.Status.TargetVersion = clusterVersionState.DesiredVersion
-		err = r.Status().Update(ctx, upgradeAccelerator)
-		if err != nil {
-			logger.Error(err, "Failed to update UpgradeAccelerator status for versions")
-			return ctrl.Result{Requeue: false}, err
-		}
-
-		// Check if the Current Version is the Desired Version - if so, no need to proceed
-		// PROD: This is enabled in production deployments
-		// Not helpful for debugging full flow but nice to not make the cluster do things it doesn't need to
-		//if clusterVersionState.CurrentVersion == clusterVersionState.DesiredVersion {
-		//	logger.Info("No upgrades in progress, no action required")
-		//	return ctrl.Result{Requeue: false}, nil
-		//}
-
-		// ============================================================================================
 		// State Check: Check if this UpdateAccelerator is enabled or not
 		// ============================================================================================
 		if strings.ToLower(uaSpec.State) == "disabled" {
 			logger.Info("UpgradeAccelerator is disabled, finished")
-			return ctrl.Result{Requeue: false}, nil
+			return ctrl.Result{RequeueAfter: time.Second * 30}, nil
 		} else {
-			logger.Info("UpgradeAccelerator is enabled, determining list of Nodes...")
+			logger.Info("UpgradeAccelerator is enabled...")
+
+			// ============================================================================================
+			// Get preliminary assets
+			// ============================================================================================
+			// Cluster Infrastructure - Platform Type
+			clusterInfrastructureType, err := getOpenShiftInfrastructureType(ctx, req, r.Client)
+			if err != nil {
+				logger.Error(err, "Failed to get OpenShift infrastructure type")
+				_ = r.setConditionInfrastructureNotFound(ctx, upgradeAccelerator, err)
+				return ctrl.Result{RequeueAfter: time.Second * 30}, err
+			}
+
+			logger.Info("OpenShift Infrastructure Type", "type", clusterInfrastructureType)
+
+			// Cluster Version State
+			clusterVersionState, err := r.getClusterVersionState(ctx, upgradeAccelerator)
+			if err != nil {
+				logger.Error(err, "Failed to get Cluster Version State")
+				return ctrl.Result{RequeueAfter: time.Second * 30}, err
+			}
+			logger.Info("Cluster Version State", "state", clusterVersionState)
+
+			// Set the UpgradeAcceleratorStatus for the CurrentVersion and TargetVersion
+			upgradeAccelerator.Status.CurrentVersion = clusterVersionState.CurrentVersion
+			upgradeAccelerator.Status.TargetVersion = clusterVersionState.DesiredVersion
+			err = r.Status().Update(ctx, upgradeAccelerator)
+			if err != nil {
+				logger.Error(err, "Failed to update UpgradeAccelerator status for versions")
+				return ctrl.Result{RequeueAfter: time.Second * 30}, err
+			}
+
+			// Check if the Current Version is the Desired Version - if so, no need to proceed
+			// PROD: This is enabled in production deployments
+			// Not helpful for debugging full flow but nice to not make the cluster do things it doesn't need to
+			//if clusterVersionState.CurrentVersion == clusterVersionState.DesiredVersion {
+			//	logger.Info("No upgrades in progress, no action required")
+			//	return ctrl.Result{RequeueAfter: time.Second * 30}, nil
+			//}
 
 			// ==========================================================================================
 			// Node Determination
@@ -135,7 +139,7 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 			nodes := &corev1.NodeList{}
 			if err := r.List(ctx, nodes, client.InNamespace(req.Namespace)); err != nil {
 				logger.Error(err, "Failed to list nodes")
-				return ctrl.Result{Requeue: false}, err
+				return ctrl.Result{RequeueAfter: time.Second * 30}, err
 			} else {
 				logger.Info("Successfully listed nodes", "count", len(nodes.Items))
 			}
@@ -157,7 +161,7 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 				machineConfigPools := &machineconfigv1.MachineConfigPoolList{}
 				if err := r.List(ctx, machineConfigPools, listOpts...); err != nil {
 					logger.Error(err, "Failed to list MachineConfigPools")
-					return ctrl.Result{Requeue: false}, err
+					return ctrl.Result{RequeueAfter: time.Second * 30}, err
 				} else {
 					logger.Info("Successfully listed MachineConfigPools", "count", len(machineConfigPools.Items))
 				}
@@ -251,13 +255,13 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 			logger.Info("List of targetedNodes", "targetedNodes", targetedNodes)
 			if len(targetedNodes) == 0 {
 				logger.Info("No targeted nodes found")
-				return ctrl.Result{Requeue: false}, nil
+				return ctrl.Result{RequeueAfter: time.Second * 30}, nil
 			} else {
 				upgradeAccelerator.Status.NodesSelected = targetedNodes
 				err = r.Status().Update(ctx, upgradeAccelerator)
 				if err != nil {
 					logger.Error(err, "Failed to update UpgradeAccelerator status for nodesSelected")
-					return ctrl.Result{Requeue: false}, err
+					return ctrl.Result{RequeueAfter: time.Second * 30}, err
 				}
 			}
 
@@ -267,23 +271,23 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 			releaseImages, err := GetReleaseImages(clusterVersionState.DesiredImage)
 			if err != nil {
 				logger.Error(err, "Failed to get Release Images")
-				return ctrl.Result{Requeue: false}, err
+				return ctrl.Result{RequeueAfter: time.Second * 30}, err
 			}
-			logger.Info("Release Images ("+fmt.Sprintf("%d", len(releaseImages))+"): ", "images", releaseImages)
+			//logger.Info("Release Images ("+fmt.Sprintf("%d", len(releaseImages))+"): ", "images", releaseImages)
 
 			// ==========================================================================================
 			// Filter the target release images
 			// ==========================================================================================
 			filteredReleaseImages := FilterReleaseImages(releaseImages, clusterInfrastructureType)
-			logger.Info("Filtered Release Images ("+fmt.Sprintf("%d", len(filteredReleaseImages))+"): ", "images", filteredReleaseImages)
+			//logger.Info("Filtered Release Images ("+fmt.Sprintf("%d", len(filteredReleaseImages))+"): ", "images", filteredReleaseImages)
 
 			// ==========================================================================================
 			// Create the Namespace for the operator workload components
 			// ==========================================================================================
-			err = r.createOperatorNamespace(ctx, upgradeAccelerator)
+			operatorNamespace, err := r.createOperatorNamespace(ctx, upgradeAccelerator)
 			if err != nil {
 				logger.Error(err, "Failed to create Operator Namespace")
-				return ctrl.Result{Requeue: false}, err
+				return ctrl.Result{RequeueAfter: time.Second * 30}, err
 			}
 
 			// ==========================================================================================
@@ -293,22 +297,45 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 			releaseImagesJSON, err := json.Marshal(releaseImages)
 			if err != nil {
 				logger.Error(err, "Failed to marshal releaseImages to JSON")
-				return ctrl.Result{Requeue: false}, err
+				return ctrl.Result{RequeueAfter: time.Second * 30}, err
 			}
 			filteredReleaseImagesJSON, err := json.Marshal(filteredReleaseImages)
 			if err != nil {
 				logger.Error(err, "Failed to marshal filteredReleaseImages to JSON")
-				return ctrl.Result{Requeue: false}, err
+				return ctrl.Result{RequeueAfter: time.Second * 30}, err
 			}
 			err = r.createReleaseConfigMap(ctx, upgradeAccelerator, clusterVersionState.DesiredVersion, string(releaseImagesJSON), string(filteredReleaseImagesJSON))
 			if err != nil {
 				logger.Error(err, "Failed to create Release ConfigMap")
-				return ctrl.Result{Requeue: false}, err
+				return ctrl.Result{RequeueAfter: time.Second * 30}, err
+			}
+
+			// ==========================================================================================
+			// Create Puller Script ConfigMap
+			// ==========================================================================================
+			err = r.createPullerScriptConfigMap(ctx, upgradeAccelerator, operatorNamespace)
+			if err != nil {
+				logger.Error(err, "Failed to create Puller Script ConfigMap")
+				return ctrl.Result{RequeueAfter: time.Second * 30}, err
+			}
+
+			// ==========================================================================================
+			// Create Pod Puller Job
+			// ==========================================================================================
+			err = r.createPullJob(ctx, upgradeAccelerator, PullJob{
+				Name:           fmt.Sprintf("%s-pod-puller", upgradeAccelerator.Name),
+				Namespace:      operatorNamespace,
+				ContainerImage: "registry.redhat.io/rhel9/support-tools:latest",
+				ConfigMapName:  fmt.Sprintf("release-%s", clusterVersionState.DesiredVersion),
+			})
+			if err != nil {
+				logger.Error(err, "Failed to create Pod Puller Job")
+				return ctrl.Result{RequeueAfter: time.Second * 30}, err
 			}
 		}
 	}
 
-	return ctrl.Result{Requeue: false}, nil
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -316,6 +343,7 @@ func (r *UpgradeAcceleratorReconciler) SetupWithManager(mgr ctrl.Manager) error 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&openshiftv1alpha1.UpgradeAccelerator{}).
 		Owns(&corev1.ConfigMap{}).
+		Owns(&batchv1.Job{}).
 		// Watch for updates to the ClusterVersion and run a reconciliation for all UpgradeAccelerators
 		Watches(&configv1.ClusterVersion{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
