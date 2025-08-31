@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -40,10 +41,45 @@ type UpgradeAcceleratorSpec struct {
 	// +optional
 	Prime bool `json:"prime,omitempty"`
 	// Parallelism defines the number of nodes to upgrade in parallel.
-	// If set to 0, all nodes will be upgraded in parallel.
-	// +kubebuilder:default:=0
+	// Default is 5.  If set to 0, all nodes will be upgraded in parallel.
+	// +kubebuilder:default:=5
 	// +optional
 	Parallelism int32 `json:"parallelism,omitempty"`
+	// Config provides some overrides and guidance to the operation of the UpgradeAccelerator
+	Config UpgradeAcceleratorConfig `json:"config,omitempty"`
+}
+
+type UpgradeAcceleratorConfig struct {
+	// Scheduling allows for overriding the default tolerations, namespace Jobs are created in, etc.
+	Scheduling UpgradeAcceleratorConfigScheduling `json:"scheduling,omitempty"`
+	// RandomWait allows for adding a random wait time before starting the image pulling.
+	RandomWait UpgradeAcceleratorConfigRandomWait `json:"randomWait,omitempty"`
+}
+
+type UpgradeAcceleratorConfigRandomWait struct {
+	// Enabled indicates whether random wait is enabled.
+	// +kubebuilder:default:=true
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+	// MinDuration is the minimum wait duration in seconds.
+	// +kubebuilder:default:=10
+	// +optional
+	MinDuration int32 `json:"minDuration,omitempty"`
+	// MaxDuration is the maximum wait duration in seconds.
+	// +kubebuilder:default:=30
+	// +optional
+	MaxDuration int32 `json:"maxDuration,omitempty"`
+}
+
+type UpgradeAcceleratorConfigScheduling struct {
+	// Tolerations is an array of tolerations for the Jobs created by the UpgradeAccelerator
+	// By default the Jobs created will tolerate all taints.
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// Namespace is the namespace in which the Jobs are created.
+	// By default the Jobs are created in the openshift-upgrade-accelerator namespace.
+	// If you specify a different namespace you will need to give permissions to the
+	// ServiceAccount used by the UpgradeAccelerator controller to manage ConfigMaps/Jobs/Pods.
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // Selector defines the selection criteria for nodes to which the upgrade accelerator applies.
@@ -64,8 +100,8 @@ type UpgradeAcceleratorStatus struct {
 	TargetVersion string `json:"targetVersion"`
 	// Conditions represents the latest available observations of the UpgradeAccelerator's current state.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-	// NodeSelected is a list of nodes that match the selector criteria.
-	NodeSelected []string `json:"nodesSelected,omitempty"`
+	// NodesSelected is a list of nodes that match the selector criteria.
+	NodesSelected []string `json:"nodesSelected,omitempty"`
 	// NodesPreheated is a list of nodes that have been preheated with the targetVersion release images.
 	NodesPreheated []string `json:"nodesPreheated,omitempty"`
 	// NodesWarming is a list of nodes that are currently being preheated with the targetVersion release images.
