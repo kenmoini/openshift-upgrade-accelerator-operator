@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -27,24 +28,23 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	openshiftv1alpha1 "github.com/kenmoini/openshift-upgrade-accelerator-operator/api/v1alpha1"
 )
 
-// UpgradeAcceleratorReconciler reconciles a UpgradeAccelerator object
-type UpgradeAcceleratorReconciler struct {
-	client.Client
-	Scheme *runtime.Scheme
-}
-
-// +kubebuilder:rbac:groups=config.openshift.io,resources=infrastructures,verbs=get;list;watch
-// +kubebuilder:rbac:groups=machineconfiguration.openshift.io,resources=machineconfigpools,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=config.openshift.io,resources=infrastructures,verbs=get;list;watch
+// +kubebuilder:rbac:groups=config.openshift.io,resources=clusteroperators,verbs=get;list;watch
+// +kubebuilder:rbac:groups=config.openshift.io,resources=clusterversions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=machineconfiguration.openshift.io,resources=machineconfigpools,verbs=get;list;watch
 // +kubebuilder:rbac:groups=openshift.kemo.dev,resources=upgradeaccelerators,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openshift.kemo.dev,resources=upgradeaccelerators/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openshift.kemo.dev,resources=upgradeaccelerators/finalizers,verbs=update
@@ -61,15 +61,6 @@ type UpgradeAcceleratorReconciler struct {
 func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
 
-	// Get preliminary assets
-	clusterInfrastructureType, err := getOpenShiftInfrastructureType(ctx, req, r.Client)
-	if err != nil {
-		logger.Error(err, "Failed to get OpenShift infrastructure type")
-		return ctrl.Result{}, err
-	}
-
-	logger.Info("OpenShift Infrastructure Type", "type", clusterInfrastructureType)
-
 	upgradeAccelerator := &openshiftv1alpha1.UpgradeAccelerator{}
 	logger.Info("Reconciling UpgradeAccelerator", "NamespacedName", req.NamespacedName)
 	if err := r.Get(ctx, req.NamespacedName, upgradeAccelerator); err != nil {
@@ -77,11 +68,55 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 	} else {
 		logger.Info("Successfully fetched UpgradeAccelerator", "NamespacedName", req.NamespacedName)
 		//logger.Info("Spec", "spec", upgradeAccelerator.Spec)
+		// ============================================================================================
+		// Base In Reconciler Variables
+		// ============================================================================================
 		uaSpec := upgradeAccelerator.Spec
 
 		validMachineConfigPools := []string{}
 		validMachineConfigPoolSelectors := make(map[string]*metav1.LabelSelector)
 		targetedNodes := []string{}
+
+		// ============================================================================================
+		// Get preliminary assets
+		// ============================================================================================
+		// Cluster Infrastructure - Platform Type
+		clusterInfrastructureType, err := getOpenShiftInfrastructureType(ctx, req, r.Client)
+		if err != nil {
+			logger.Error(err, "Failed to get OpenShift infrastructure type")
+			_ = r.setConditionInfrastructureNotFound(ctx, upgradeAccelerator, err)
+			return ctrl.Result{}, err
+		}
+
+		logger.Info("OpenShift Infrastructure Type", "type", clusterInfrastructureType)
+
+		// Cluster Version State
+		clusterVersionState, err := r.getClusterVersionState(ctx, upgradeAccelerator)
+		if err != nil {
+			logger.Error(err, "Failed to get Cluster Version State")
+			return ctrl.Result{}, err
+		}
+		logger.Info("Cluster Version State", "state", clusterVersionState)
+
+		// Check if the Current Version is the Desired Version - if so, no need to proceed
+		// PROD: This is enabled in production deployments
+		// Not helpful for debugging full flow but nice to not make the cluster do things it doesn't need to
+		//if clusterVersionState.CurrentVersion == clusterVersionState.DesiredVersion {
+		//	logger.Info("No upgrades in progress, no action required")
+		//	return ctrl.Result{}, nil
+		//}
+
+		// Get the Release Images
+		releaseImages, err := GetReleaseImages(clusterVersionState.DesiredImage)
+		if err != nil {
+			logger.Error(err, "Failed to get Release Images")
+			return ctrl.Result{}, err
+		}
+		logger.Info("Release Images ("+fmt.Sprintf("%d", len(releaseImages))+"): ", "images", releaseImages)
+
+		// Filter the target release images
+		filteredReleaseImages := FilterReleaseImages(releaseImages, clusterInfrastructureType)
+		logger.Info("Filtered Release Images ("+fmt.Sprintf("%d", len(filteredReleaseImages))+"): ", "images", filteredReleaseImages)
 
 		// ============================================================================================
 		// State Check: Check if this UpdateAccelerator is enabled or not
@@ -213,60 +248,84 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 	return ctrl.Result{}, nil
 }
 
-// getOpenShiftInfrastructureType retrieves the OpenShift infrastructure type.
-// This is used to filter out any unnecessary images.
-func getOpenShiftInfrastructureType(ctx context.Context, req ctrl.Request, client client.Client) (string, error) {
-	infrastructure := &configv1.Infrastructure{}
-	if err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, infrastructure); err != nil {
-		return "", err
-	}
-	return string(infrastructure.Status.PlatformStatus.Type), nil
-}
-
-// filterOpenShiftReleaseImages filters the OpenShift release images based on the infrastructure type.
-func filterOpenShiftReleaseImages(images []string, infrastructureType string) []string {
-	var filteredImages []string
-	var filterMatch string
-
-	// Switch between the infrastructure types and set the filter for each
-	switch infrastructureType {
-	case "None", "BareMetal":
-		// Removal of aws- azure- gcp- ibm- ibmcloud- libvirt- nutanix- openstack- ovirt- powervs- vsphere-
-		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
-	case "AWS":
-		filterMatch = "(azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
-	case "Azure":
-		filterMatch = "(aws-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
-	case "GCP":
-		filterMatch = "(aws-|azure-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
-	case "IBMCloud":
-		filterMatch = "(aws-|azure-|gcp-|ibm-|libvirt-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
-	case "Libvirt":
-		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|nutanix-|openstack-|ovirt-|powervs-|vsphere-)"
-	case "Nutanix":
-		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|openstack-|ovirt-|powervs-|vsphere-)"
-	case "OpenStack":
-		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|ovirt-|powervs-|vsphere-)"
-	case "oVirt":
-		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|powervs-|vsphere-)"
-	case "PowerVS":
-		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|vsphere-)"
-	case "VSphere":
-		filterMatch = "(aws-|azure-|gcp-|ibm-|ibmcloud-|libvirt-|nutanix-|openstack-|ovirt-|powervs-)"
-	}
-
-	for _, image := range images {
-		if strings.Contains(image, filterMatch) {
-			filteredImages = append(filteredImages, image)
-		}
-	}
-	return filteredImages
-}
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *UpgradeAcceleratorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&openshiftv1alpha1.UpgradeAccelerator{}).
+		// Watch for updates to the ClusterVersion and run a reconciliation for all UpgradeAccelerators
+		Watches(&configv1.ClusterVersion{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				upgradeAcceleratorList := &openshiftv1alpha1.UpgradeAcceleratorList{}
+				client := mgr.GetClient()
+
+				err := client.List(context.TODO(), upgradeAcceleratorList)
+				if err != nil {
+					return []reconcile.Request{}
+				}
+				var reconcileRequests []reconcile.Request
+				if _, ok := obj.(*configv1.ClusterVersion); ok {
+					// Reconcile all UpgradeAccelerators
+					for _, ua := range upgradeAcceleratorList.Items {
+						rec := reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Name:      ua.Name,
+								Namespace: ua.Namespace,
+							},
+						}
+						reconcileRequests = append(reconcileRequests, rec)
+					}
+				}
+				return reconcileRequests
+			}),
+		).
+		// Watch for updates to the ClusterOperators and run a reconciliation for all UpgradeAccelerators
+		Watches(&configv1.ClusterOperator{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				upgradeAcceleratorList := &openshiftv1alpha1.UpgradeAcceleratorList{}
+				client := mgr.GetClient()
+
+				err := client.List(context.TODO(), upgradeAcceleratorList)
+				if err != nil {
+					return []reconcile.Request{}
+				}
+				var reconcileRequests []reconcile.Request
+				if _, ok := obj.(*configv1.ClusterOperator); ok {
+					// Reconcile all UpgradeAccelerators
+					for _, ua := range upgradeAcceleratorList.Items {
+						rec := reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Name:      ua.Name,
+								Namespace: ua.Namespace,
+							},
+						}
+						reconcileRequests = append(reconcileRequests, rec)
+					}
+				}
+				return reconcileRequests
+			}),
+		).
+		// Filter watched events to check only some fields on relevant ClusterVersion updates
+		WithEventFilter(predicate.Funcs{
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				if _, ok := e.ObjectNew.(*configv1.ClusterVersion); ok {
+					return hasClusterVersionChanged(
+						e.ObjectOld.(*configv1.ClusterVersion),
+						e.ObjectNew.(*configv1.ClusterVersion))
+				}
+				return true
+			},
+		}).
+		// Filter watched events to check only some fields on relevant machine-config ClusterOperator updates
+		WithEventFilter(predicate.Funcs{
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				if _, ok := e.ObjectNew.(*configv1.ClusterOperator); ok {
+					return hasMachineConfigClusterOperatorChanged(
+						e.ObjectOld.(*configv1.ClusterOperator),
+						e.ObjectNew.(*configv1.ClusterOperator))
+				}
+				return true
+			},
+		}).
 		Named("upgradeaccelerator").
 		Complete(r)
 }
