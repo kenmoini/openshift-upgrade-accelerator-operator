@@ -40,11 +40,88 @@ spec:
           spec:
             description: UpgradeAcceleratorSpec defines the desired state of UpgradeAccelerator.
             properties:
+              config:
+                description: Config provides some overrides and guidance to the operation
+                  of the UpgradeAccelerator
+                properties:
+                  randomWait:
+                    description: RandomWait allows for adding a random wait time before
+                      starting the image pulling.
+                    properties:
+                      enabled:
+                        default: true
+                        description: Enabled indicates whether random wait is enabled.
+                        type: boolean
+                      maxDuration:
+                        default: 30
+                        description: MaxDuration is the maximum wait duration in seconds.
+                        format: int32
+                        type: integer
+                      minDuration:
+                        default: 10
+                        description: MinDuration is the minimum wait duration in seconds.
+                        format: int32
+                        type: integer
+                    type: object
+                  scheduling:
+                    description: Scheduling allows for overriding the default tolerations,
+                      namespace Jobs are created in, etc.
+                    properties:
+                      namespace:
+                        description: |-
+                          Namespace is the namespace in which the Jobs are created.
+                          By default the Jobs are created in the openshift-upgrade-accelerator namespace.
+                          If you specify a different namespace you will need to give permissions to the
+                          ServiceAccount used by the UpgradeAccelerator controller to manage ConfigMaps/Jobs/Pods.
+                        type: string
+                      tolerations:
+                        description: |-
+                          Tolerations is an array of tolerations for the Jobs created by the UpgradeAccelerator
+                          By default the Jobs created will tolerate all taints.
+                        items:
+                          description: |-
+                            The pod this Toleration is attached to tolerates any taint that matches
+                            the triple <key,value,effect> using the matching operator <operator>.
+                          properties:
+                            effect:
+                              description: |-
+                                Effect indicates the taint effect to match. Empty means match all taint effects.
+                                When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                              type: string
+                            key:
+                              description: |-
+                                Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                                If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                              type: string
+                            operator:
+                              description: |-
+                                Operator represents a key's relationship to the value.
+                                Valid operators are Exists and Equal. Defaults to Equal.
+                                Exists is equivalent to wildcard for value, so that a pod can
+                                tolerate all taints of a particular category.
+                              type: string
+                            tolerationSeconds:
+                              description: |-
+                                TolerationSeconds represents the period of time the toleration (which must be
+                                of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                                it is not set, which means tolerate the taint forever (do not evict). Zero and
+                                negative values will be treated as 0 (evict immediately) by the system.
+                              format: int64
+                              type: integer
+                            value:
+                              description: |-
+                                Value is the taint value the toleration matches to.
+                                If the operator is Exists, the value should be empty, otherwise just a regular string.
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                type: object
               parallelism:
-                default: 0
+                default: 5
                 description: |-
                   Parallelism defines the number of nodes to upgrade in parallel.
-                  If set to 0, all nodes will be upgraded in parallel.
+                  Default is 5.  If set to 0, all nodes will be upgraded in parallel.
                 format: int32
                 type: integer
               prime:
@@ -190,7 +267,7 @@ spec:
                   type: string
                 type: array
               nodesSelected:
-                description: NodeSelected is a list of nodes that match the selector
+                description: NodesSelected is a list of nodes that match the selector
                   criteria.
                 items:
                   type: string
