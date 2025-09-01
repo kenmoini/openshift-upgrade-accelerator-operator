@@ -117,6 +117,24 @@ is manually re-applied afterwards.
 
 More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
 
+---
+
+## Overrides
+
+### Disabling Per-Node Preheating
+
+In case you want to cast a wide net but let a few small fish through, you can label nodes with `openshift.kemo.dev/disable-preheat: "true"` and the Operator will exclude that node no matter what other selectors include it.  This will cause the node to only pull release images as it needs when normally scheduled.
+
+### Manually Specifying Primer Nodes
+
+If you want a node (or set of them) to be specified as Primer Nodes (nodes that pull images before all the others that are being targeted) you can apply a Node label of `openshift.kemo.dev/primer-node: "true"`.
+
+Any node with that label will have the images pulled to it first - this is only done when Priming is enabled and ignores any Parallelism limits if you have multiple nodes labeled.
+
+Inversely, set the label's value to `false` in case you want to exclude a Node from being a primer node.
+
+---
+
 ## License
 
 Copyright 2025.

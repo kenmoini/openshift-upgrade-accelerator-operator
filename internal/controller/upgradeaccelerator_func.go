@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 
 	openshiftv1alpha1 "github.com/kenmoini/openshift-upgrade-accelerator-operator/api/v1alpha1"
@@ -166,4 +167,11 @@ func getOpenShiftInfrastructureType(ctx context.Context, req ctrl.Request, clien
 		return "", err
 	}
 	return string(infrastructure.Status.PlatformStatus.Type), nil
+}
+
+// hashName generates a short 8 character SHA256 hash of an input string
+func hashName(name string) string {
+	h := sha256.New()
+	h.Write([]byte(name))
+	return fmt.Sprintf("%x", h.Sum(nil))[:8]
 }

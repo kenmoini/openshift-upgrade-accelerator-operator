@@ -84,6 +84,13 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 		validMachineConfigPools := []string{}
 		validMachineConfigPoolSelectors := make(map[string]*metav1.LabelSelector)
 		targetedNodes := []string{}
+		primingProhibitedNodes := []string{}
+
+		// Determine Job Puller Image
+		jobPullerImage := UpgradeAcceleratorDefaultJobPullerImage
+		if uaSpec.Config.JobImage != "" {
+			jobPullerImage = uaSpec.Config.JobImage
+		}
 
 		// ============================================================================================
 		// State Check: Check if this UpdateAccelerator is enabled or not
@@ -228,6 +235,17 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 					logger.Error(err, "Failed to list nodes", "selector", uaSpec.Selector.NodeSelector)
 				} else {
 					for _, node := range nodeList.Items {
+						// Make sure that the node does not have the openshift.kemo.dev/disable-preheat: "true" label
+						excludeLabelValue, ok := node.Labels["openshift.kemo.dev/disable-preheat"]
+						if ok && strings.ToLower(excludeLabelValue) == "true" {
+							logger.Info("Node has openshift.kemo.dev/disable-preheat: \"true\" label, skipping", "node", node.Name)
+							continue
+						}
+						// If this node has priming explicitly disabled, add it to the primingProhibitedNodes
+						primingLabelValue, ok := node.Labels["openshift.kemo.dev/primer-node"]
+						if ok && strings.ToLower(primingLabelValue) == "false" {
+							primingProhibitedNodes = append(primingProhibitedNodes, node.Name)
+						}
 						targetedNodes = append(targetedNodes, node.Name)
 					}
 				}
@@ -242,6 +260,17 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 							logger.Error(err, "Failed to list nodes", "selector", selector)
 						} else {
 							for _, node := range nodeList.Items {
+								// Make sure that the node does not have the openshift.kemo.dev/disable-preheat: "true" label
+								excludeLabelValue, ok := node.Labels["openshift.kemo.dev/disable-preheat"]
+								if ok && strings.ToLower(excludeLabelValue) == "true" {
+									logger.Info("Node has openshift.kemo.dev/disable-preheat: \"true\" label, skipping", "node", node.Name)
+									continue
+								}
+								// If this node has priming explicitly disabled, add it to the primingProhibitedNodes
+								primingLabelValue, ok := node.Labels["openshift.kemo.dev/primer-node"]
+								if ok && strings.ToLower(primingLabelValue) == "false" {
+									primingProhibitedNodes = append(primingProhibitedNodes, node.Name)
+								}
 								targetedNodes = append(targetedNodes, node.Name)
 							}
 						}
@@ -320,21 +349,161 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 			}
 
 			// ==========================================================================================
-			// Create Pod Puller Job
+			// Determine priming function
 			// ==========================================================================================
-			err = r.createPullJob(ctx, upgradeAccelerator, PullJob{
-				Name:           fmt.Sprintf("%s-pod-puller", upgradeAccelerator.Name),
-				Namespace:      operatorNamespace,
-				ContainerImage: "registry.redhat.io/rhel9/support-tools:latest",
-				ConfigMapName:  fmt.Sprintf("release-%s", clusterVersionState.DesiredVersion),
-			})
+			primerNodes := []string{}
+			if uaSpec.Prime {
+				// Check if there are manually set primer nodes
+				nodeList := &corev1.NodeList{}
+				if err := r.List(ctx, nodeList, client.MatchingLabels(map[string]string{"openshift.kemo.dev/primer-node": "true"})); err != nil {
+					logger.Error(err, "Failed to list nodes", "selector", uaSpec.Selector.NodeSelector)
+				} else {
+					for _, node := range nodeList.Items {
+						primerNodes = append(primerNodes, node.Name)
+					}
+				}
+				// If no manually set primer nodes, then just pick one from the targeted nodes if it's not part of the primingProhibitedNodes list
+				for _, tNode := range targetedNodes {
+					if !slices.Contains(primingProhibitedNodes, tNode) {
+						primerNodes = append(primerNodes, tNode)
+					}
+				}
+				upgradeAccelerator.Status.PrimerNodes = primerNodes
+				err = r.Status().Update(ctx, upgradeAccelerator)
+				if err != nil {
+					logger.Error(err, "Failed to update UpgradeAccelerator status")
+					return ctrl.Result{RequeueAfter: time.Second * 30}, err
+				}
+			}
+			logger.Info("Primer Nodes", "nodes", primerNodes)
+
+			// ==========================================================================================
+			// Determine Node List States
+			// ==========================================================================================
+			upgradeAcceleratorStatusChanged := false
+			nodesWaiting := upgradeAccelerator.Status.NodesWaiting
+
+			// Loop through the targetedNodes
+			for _, tNode := range targetedNodes {
+				// If the node is in the NodesWarming or NodesPreheated lists don't add it to the NodesWaiting list
+				if !slices.Contains(upgradeAccelerator.Status.NodesWarming, tNode) && !slices.Contains(upgradeAccelerator.Status.NodesPreheated, tNode) && !slices.Contains(nodesWaiting, tNode) {
+					nodesWaiting = append(nodesWaiting, tNode)
+					upgradeAcceleratorStatusChanged = true
+				}
+			}
+
+			// Populate the nodes Waiting list
+			if upgradeAcceleratorStatusChanged {
+				upgradeAccelerator.Status.NodesWaiting = nodesWaiting
+				err = r.Status().Update(ctx, upgradeAccelerator)
+				if err != nil {
+					logger.Error(err, "Failed to update UpgradeAccelerator status")
+					return ctrl.Result{RequeueAfter: time.Second * 30}, err
+				}
+			}
+
+			// ==========================================================================================
+			// Primer Node Scheduling
+			// ==========================================================================================
+			if uaSpec.Prime && len(primerNodes) > 0 {
+				// Loop through each node and schedule a Pod
+				for _, pNode := range primerNodes {
+					// Make sure the node isn't already warming
+					if slices.Contains(upgradeAccelerator.Status.NodesWarming, pNode) {
+						continue
+					}
+					// Make sure the node isn't already preheated
+					if slices.Contains(upgradeAccelerator.Status.NodesPreheated, pNode) {
+						continue
+					}
+					err = r.createPullJob(ctx, upgradeAccelerator, PullJob{
+						Name:           fmt.Sprintf("%s-ua-puller-%s", pNode, hashName(upgradeAccelerator.Name)),
+						Namespace:      operatorNamespace,
+						ContainerImage: jobPullerImage,
+						ConfigMapName:  fmt.Sprintf("release-%s", clusterVersionState.DesiredVersion),
+						TargetNodeName: pNode,
+						ReleaseVersion: clusterVersionState.DesiredVersion,
+					})
+					if err != nil {
+						logger.Error(err, "Failed to create Pod Puller Job")
+						return ctrl.Result{RequeueAfter: time.Second * 30}, err
+					} else {
+						// Pod has been scheduled successfully
+						upgradeAccelerator.Status.NodesWarming = append(upgradeAccelerator.Status.NodesWarming, pNode)
+						// Remove the node from the NodesWaiting list
+						upgradeAccelerator.Status.NodesWaiting = append(upgradeAccelerator.Status.NodesWaiting[:slices.Index(upgradeAccelerator.Status.NodesWaiting, pNode)], upgradeAccelerator.Status.NodesWaiting[slices.Index(upgradeAccelerator.Status.NodesWaiting, pNode)+1:]...)
+						err = r.Status().Update(ctx, upgradeAccelerator)
+						if err != nil {
+							logger.Error(err, "Failed to update UpgradeAccelerator status")
+							return ctrl.Result{RequeueAfter: time.Second * 30}, err
+						}
+					}
+				}
+			}
+
+			// ==========================================================================================
+			// Job Completion Scan
+			// ==========================================================================================
+			// Get all the Jobs in the namespace that match the label for this release
+			jobs := &batchv1.JobList{}
+			err = r.List(ctx, jobs, client.InNamespace(operatorNamespace), client.MatchingLabels{"pull-job/release": clusterVersionState.DesiredVersion})
 			if err != nil {
-				logger.Error(err, "Failed to create Pod Puller Job")
+				logger.Error(err, "Failed to list Jobs")
 				return ctrl.Result{RequeueAfter: time.Second * 30}, err
+			} else {
+				if len(jobs.Items) == 0 {
+					// No Jobs?!!?!
+					// Check if there are any NodesWarming - these should be reset and rescheduled by removing them from the status list
+					if len(upgradeAccelerator.Status.NodesWarming) > 0 {
+						upgradeAccelerator.Status.NodesWaiting = append(upgradeAccelerator.Status.NodesWaiting, upgradeAccelerator.Status.NodesWarming...)
+						upgradeAccelerator.Status.NodesWarming = nil
+						err = r.Status().Update(ctx, upgradeAccelerator)
+						if err != nil {
+							logger.Error(err, "Failed to update UpgradeAccelerator status")
+							return ctrl.Result{RequeueAfter: time.Second * 30}, err
+						}
+					}
+				} else {
+					// Loop through the Jobs and check for any completed Jobs
+					// If a job is completed successfully then move the Node it is running on into the NodesPreheated list and remove it from the NodesWaiting list
+					for _, job := range jobs.Items {
+						if job.Status.Succeeded > 0 {
+							// Find the node the job is running on
+							nodeName := job.Spec.Template.Spec.NodeName
+							upgradeAcceleratorStatusChanged = false
+							// Move the node to the NodesPreheated list if it is not already in it
+							if !slices.Contains(upgradeAccelerator.Status.NodesPreheated, nodeName) {
+								upgradeAccelerator.Status.NodesPreheated = append(upgradeAccelerator.Status.NodesPreheated, nodeName)
+								upgradeAcceleratorStatusChanged = true
+							}
+							// Remove the node from the NodesWarming list if it exists
+							if slices.Contains(upgradeAccelerator.Status.NodesWarming, nodeName) {
+								upgradeAccelerator.Status.NodesWarming = append(upgradeAccelerator.Status.NodesWarming[:slices.Index(upgradeAccelerator.Status.NodesWarming, nodeName)], upgradeAccelerator.Status.NodesWarming[slices.Index(upgradeAccelerator.Status.NodesWarming, nodeName)+1:]...)
+								upgradeAcceleratorStatusChanged = true
+							}
+							if upgradeAcceleratorStatusChanged {
+								err = r.Status().Update(ctx, upgradeAccelerator)
+								if err != nil {
+									logger.Error(err, "Failed to update UpgradeAccelerator status")
+									return ctrl.Result{RequeueAfter: time.Second * 30}, err
+								}
+							}
+						}
+					}
+				}
+			}
+
+			// Check if all the nodes have been completed - if so return success
+			if len(upgradeAccelerator.Status.NodesWaiting) == 0 && len(upgradeAccelerator.Status.NodesWarming) == 0 {
+				if len(upgradeAccelerator.Status.NodesPreheated) == len(upgradeAccelerator.Status.NodesSelected) {
+					// All nodes have been preheated successfully
+					logger.Info("All nodes have been preheated successfully")
+				}
 			}
 		}
 	}
 
+	logger.Info("Upgrade Accelerator reconciliation completed")
 	return ctrl.Result{}, nil
 }
 

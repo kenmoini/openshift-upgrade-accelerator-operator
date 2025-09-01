@@ -6,10 +6,11 @@ import (
 )
 
 const (
-	UpgradeAcceleratorDefaultNamespace     = "openshift-upgrade-accelerator"
-	UpgradeAcceleratorDefaultParallelism   = 5
-	UpgradeAcceleratorDefaultRandomWaitMin = 10
-	UpgradeAcceleratorDefaultRandomWaitMax = 30
+	UpgradeAcceleratorDefaultJobPullerImage = "registry.redhat.io/rhel9/support-tools:latest"
+	UpgradeAcceleratorDefaultNamespace      = "openshift-upgrade-accelerator"
+	UpgradeAcceleratorDefaultParallelism    = 5
+	UpgradeAcceleratorDefaultRandomWaitMin  = 10
+	UpgradeAcceleratorDefaultRandomWaitMax  = 30
 )
 
 // UpgradeAcceleratorReconciler reconciles a UpgradeAccelerator object

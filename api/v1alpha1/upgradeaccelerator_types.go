@@ -54,6 +54,11 @@ type UpgradeAcceleratorConfig struct {
 	Scheduling UpgradeAcceleratorConfigScheduling `json:"scheduling,omitempty"`
 	// RandomWait allows for adding a random wait time before starting the image pulling.
 	RandomWait UpgradeAcceleratorConfigRandomWait `json:"randomWait,omitempty"`
+	// JobImage is the image used for the upgrade jobs.
+	// Defaults to registry.redhat.io/rhel9/support-tools:latest
+	// +kubebuilder:default:="registry.redhat.io/rhel9/support-tools:latest"
+	// +optional
+	JobImage string `json:"jobImage,omitempty"`
 }
 
 type UpgradeAcceleratorConfigRandomWait struct {
@@ -108,6 +113,8 @@ type UpgradeAcceleratorStatus struct {
 	NodesWarming []string `json:"nodesWarming,omitempty"`
 	// NodesWaiting is a list of nodes that are waiting to be preheated with the targetVersion release images.
 	NodesWaiting []string `json:"nodesWaiting,omitempty"`
+	// PrimerNodes are a list of Nodes that are scheduled to pull first before others
+	PrimerNodes []string `json:"primerNodes,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -44,6 +44,12 @@ spec:
                 description: Config provides some overrides and guidance to the operation
                   of the UpgradeAccelerator
                 properties:
+                  jobImage:
+                    default: registry.redhat.io/rhel9/support-tools:latest
+                    description: |-
+                      JobImage is the image used for the upgrade jobs.
+                      Defaults to registry.redhat.io/rhel9/support-tools:latest
+                    type: string
                   randomWait:
                     description: RandomWait allows for adding a random wait time before
                       starting the image pulling.
@@ -281,6 +287,12 @@ spec:
               nodesWarming:
                 description: NodesWarming is a list of nodes that are currently being
                   preheated with the targetVersion release images.
+                items:
+                  type: string
+                type: array
+              primerNodes:
+                description: PrimerNodes are a list of Nodes that are scheduled to
+                  pull first before others
                 items:
                   type: string
                 type: array
