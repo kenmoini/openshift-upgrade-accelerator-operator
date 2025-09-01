@@ -33,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
-	//logf "sigs.k8s.io/controller-runtime/pkg/log"
+	// logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -77,7 +77,7 @@ func ignoreDeletionPredicate() predicate.Predicate {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	//logger := logf.FromContext(ctx)
+	// logger := logf.FromContext(ctx)
 	globalLog = ctrl.Log.WithName("upgrade-accelerator")
 
 	upgradeAccelerator := &openshiftv1alpha1.UpgradeAccelerator{}
@@ -87,15 +87,9 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 	} else {
 		globalLog.Info("Successfully fetched UpgradeAccelerator", "NamespacedName", req.NamespacedName)
 		logger := ctrl.Log.WithName(upgradeAccelerator.Name)
-		//logger.Info("Spec", "spec", upgradeAccelerator.Spec)
 		// ============================================================================================
 		// Base In-Reconciler Variables
 		// ============================================================================================
-		//validMachineConfigPools := []string{}
-		//validMachineConfigPoolSelectors := make(map[string]*metav1.LabelSelector)
-		//targetedNodes := []string{}
-		//primingProhibitedNodes := []string{}
-
 		// Determine Job Puller Image
 		jobPullerImage := UpgradeAcceleratorDefaultJobPullerImage
 		if upgradeAccelerator.Spec.Config.JobImage != "" {
@@ -122,7 +116,7 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 			// Get preliminary assets
 			// ============================================================================================
 			// Cluster Infrastructure - Platform Type
-			clusterInfrastructureType, err := getOpenShiftInfrastructureType(ctx, req, r.Client)
+			clusterInfrastructureType, err := getOpenShiftInfrastructureType(ctx, r.Client)
 			if err != nil {
 				logger.Error(err, "Failed to get OpenShift infrastructure type")
 				_ = r.setConditionInfrastructureNotFound(ctx, upgradeAccelerator, err)
@@ -173,20 +167,24 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 					return ctrl.Result{RequeueAfter: time.Second * 30}, err
 				}
 			}
-			//upgradeAcceleratorStatusChanged = false
+			// upgradeAcceleratorStatusChanged = false
 
 			// Check if the Current Version is the Desired Version - if so, no need to proceed
 			// PROD: This is enabled in production deployments
 			// Not helpful for debugging full flow but nice to not make the cluster do things it doesn't need to
-			//if clusterVersionState.CurrentVersion == clusterVersionState.DesiredVersion {
+			// if clusterVersionState.CurrentVersion == clusterVersionState.DesiredVersion {
 			//	logger.Info("No upgrades in progress, no action required")
 			//	return ctrl.Result{RequeueAfter: time.Second * 30}, nil
-			//}
+			// }
 
 			// ==========================================================================================
 			// Targeted Nodes State Determination
 			// ==========================================================================================
 			targetedNodes, prohibitedNodes, primingProhibitedNodes, err := r.determineTargetedNodes(ctx, upgradeAccelerator, &logger)
+			if err != nil {
+				logger.Error(err, "Failed to determine targeted nodes")
+				return ctrl.Result{RequeueAfter: time.Second * 30}, err
+			}
 			logger.Info("List of final targetedNodes", "targetedNodes", targetedNodes)
 			logger.Info("List of final prohibitedNodes", "prohibitedNodes", prohibitedNodes)
 			logger.Info("List of final primingProhibitedNodes", "primingProhibitedNodes", primingProhibitedNodes)
@@ -224,13 +222,13 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 				_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_RUNNING, CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
 				return ctrl.Result{RequeueAfter: time.Second * 30}, err
 			}
-			//logger.V(1).Info("Release Images ("+fmt.Sprintf("%d", len(releaseImages))+"): ", "images", releaseImages)
+			// logger.V(1).Info("Release Images ("+fmt.Sprintf("%d", len(releaseImages))+"): ", "images", releaseImages)
 
 			// ==========================================================================================
 			// Filter the target release images
 			// ==========================================================================================
 			filteredReleaseImages := FilterReleaseImages(releaseImages, clusterInfrastructureType)
-			//logger.V(1).Info("Filtered Release Images ("+fmt.Sprintf("%d", len(filteredReleaseImages))+"): ", "images", filteredReleaseImages)
+			// logger.V(1).Info("Filtered Release Images ("+fmt.Sprintf("%d", len(filteredReleaseImages))+"): ", "images", filteredReleaseImages)
 
 			// ==========================================================================================
 			// Create the Namespace for the operator workload components
@@ -270,7 +268,7 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 			// ==========================================================================================
 			// Create Puller Script ConfigMap
 			// ==========================================================================================
-			err = r.createPullerScriptConfigMap(ctx, upgradeAccelerator, operatorNamespace)
+			err = r.createPullerScriptConfigMap(ctx, upgradeAccelerator)
 			if err != nil {
 				logger.Error(err, "Failed to create Puller Script ConfigMap")
 				_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_SETUP, err.Error())
@@ -351,7 +349,6 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 			// 				logger.Error(err, "Failed to re-fetch UpgradeAccelerator")
 			// 				return ctrl.Result{RequeueAfter: time.Second * 30}, err
 			// 			}
-			// 			//return ctrl.Result{RequeueAfter: time.Second * 15}, nil
 			// 		}
 			// 	}
 			// }
@@ -367,7 +364,6 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 					logger.Error(err, "Failed to re-fetch UpgradeAccelerator")
 					return ctrl.Result{RequeueAfter: time.Second * 30}, err
 				}
-				//return ctrl.Result{RequeueAfter: time.Second * 15}, nil
 			} else {
 
 				// ==========================================================================================
@@ -402,7 +398,7 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 					}
 					logger.Info("Primer Nodes", "nodes", primerNodes)
 				} else {
-					r.setConditionPrimerSkipped(ctx, upgradeAccelerator, "Priming effectively disabled")
+					_ = r.setConditionPrimerSkipped(ctx, upgradeAccelerator, "Priming effectively disabled")
 					logger.Info("Priming effectively disabled")
 				}
 
@@ -476,7 +472,7 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 				// Primer State Check
 				// ==========================================================================================
 				// If the priming is either disabled or we're done priming, continue to rotate through the remaining nodes
-				primerCondition := r.getConditionReason(ctx, upgradeAccelerator, CONDITION_TYPE_PRIMER)
+				primerCondition := r.getConditionReason(upgradeAccelerator, CONDITION_TYPE_PRIMER)
 				if primerCondition == CONDITION_REASON_PRIMER_SKIPPED || primerCondition == CONDITION_REASON_PRIMER_COMPLETED {
 					// Get the next set of nodes to process
 					// If parallelism is set to 0, then just process all the remaining nodes

@@ -6,29 +6,25 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
-	//logf "sigs.k8s.io/controller-runtime/pkg/log"
+	// logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-//import (
-//)
+// func GetReleaseImages(releaseImage string) ([]string, error) {
+// 	o := release.InfoOptions{
+// 		Images: []string{releaseImage},
+// 	}
 //
-//func GetReleaseImages(releaseImage string) ([]string, error) {
-//	o := release.InfoOptions{
-//		Images: []string{releaseImage},
-//	}
-//
-//	err := o.Run()
-//	if err != nil {
-//		return nil, err
-//	}
-//	return o.Images, nil
-//}
+// 	err := o.Run()
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return o.Images, nil
+// }
 
 // in the meantime because I am dumb, just run the cli command
 
 func runOCCommand(releaseImage string) (outputLinesStr string, err error) {
 	outputLines := []string{}
-	outputLinesStr = ""
 
 	cmdLine := "oc adm release info " + releaseImage + " -o jsonpath='{.references.spec.tags}' | jq -r '[.[] | {name: .name, from: .from.name}]'"
 
@@ -53,8 +49,14 @@ func runOCCommand(releaseImage string) (outputLinesStr string, err error) {
 		outputLines = append(outputLines, scanner.Text())
 	}
 	if scanner.Err() != nil {
-		cmd.Process.Kill()
-		cmd.Wait()
+		err = cmd.Process.Kill()
+		if err != nil {
+			return "", err
+		}
+		err = cmd.Wait()
+		if err != nil {
+			return "", err
+		}
 		return "", scanner.Err()
 	}
 	// Join the lines together
@@ -78,7 +80,6 @@ func GetReleaseImages(releaseImage string) ([]ReleaseImageTags, error) {
 
 func runOCCommandGetReleaseImageFromVersion(releaseVersion string) (outputLinesStr string, err error) {
 	outputLines := []string{}
-	outputLinesStr = ""
 
 	cmdLine := "oc adm release info " + releaseVersion + " -o jsonpath='{.image}'"
 
@@ -103,8 +104,14 @@ func runOCCommandGetReleaseImageFromVersion(releaseVersion string) (outputLinesS
 		outputLines = append(outputLines, scanner.Text())
 	}
 	if scanner.Err() != nil {
-		cmd.Process.Kill()
-		cmd.Wait()
+		err = cmd.Process.Kill()
+		if err != nil {
+			return "", err
+		}
+		err = cmd.Wait()
+		if err != nil {
+			return "", err
+		}
 		return "", scanner.Err()
 	}
 	// Join the lines together
@@ -122,7 +129,6 @@ func GetReleaseImageFromVersion(releaseVersion string) (string, error) {
 
 func runOCCommandGetReleaseVersionFromImage(releaseImage string) (outputLinesStr string, err error) {
 	outputLines := []string{}
-	outputLinesStr = ""
 
 	cmdLine := "oc adm release info " + releaseImage + " -o jsonpath='{.metadata.version}'"
 
@@ -147,8 +153,14 @@ func runOCCommandGetReleaseVersionFromImage(releaseImage string) (outputLinesStr
 		outputLines = append(outputLines, scanner.Text())
 	}
 	if scanner.Err() != nil {
-		cmd.Process.Kill()
-		cmd.Wait()
+		err = cmd.Process.Kill()
+		if err != nil {
+			return "", err
+		}
+		err = cmd.Wait()
+		if err != nil {
+			return "", err
+		}
 		return "", scanner.Err()
 	}
 	// Join the lines together

@@ -112,7 +112,8 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 			// Loop through each validMachineConfigPoolSelector and add the nodeSelector to it
 			for pool, selector := range validMachineConfigPoolSelectors {
 				// Every MCP should have a set of nodeSelectors applied to it, checks are done earlier
-				//if selector != nil {
+				// Save here in case of weird nil dereference errors?
+				// if selector != nil {
 				// Merge the nodeSelectors
 				if err := mergo.Merge(selector, upgradeAccelerator.Spec.Selector.NodeSelector); err != nil {
 					_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_SETUP, err.Error())
@@ -121,7 +122,7 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 					return nil, nil, nil, err
 				}
 				logger.Info("determineTargetedNodes: Merged NodeSelector into MachineConfigPoolSelectors", pool, selector)
-				//}
+				// }
 			}
 			for pool, selector := range validMachineConfigPoolSelectors {
 				// Next get the nodes that match this pool's merged selectors

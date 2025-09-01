@@ -9,7 +9,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	kapierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/pointer"
+
+	// "k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -53,7 +55,7 @@ func (reconciler *UpgradeAcceleratorReconciler) createPullJob(ctx context.Contex
 	jobConstructor := &batchv1.Job{
 		ObjectMeta: jobMetadata,
 		Spec: batchv1.JobSpec{
-			TTLSecondsAfterFinished: pointer.Int32Ptr(3600),
+			TTLSecondsAfterFinished: ptr.To(int32(3600)),
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
@@ -71,8 +73,8 @@ func (reconciler *UpgradeAcceleratorReconciler) createPullJob(ctx context.Contex
 							Env:     baseEnvVars,
 							TTY:     true,
 							SecurityContext: &corev1.SecurityContext{
-								Privileged: pointer.BoolPtr(true),
-								RunAsUser:  pointer.Int64Ptr(0),
+								Privileged: ptr.To(true),
+								RunAsUser:  ptr.To(int64(0)),
 								SeccompProfile: &corev1.SeccompProfile{
 									Type: corev1.SeccompProfileTypeUnconfined,
 								},
@@ -121,7 +123,7 @@ func (reconciler *UpgradeAcceleratorReconciler) createPullJob(ctx context.Contex
 							VolumeSource: corev1.VolumeSource{
 								HostPath: &corev1.HostPathVolumeSource{
 									Path: "/",
-									Type: (*corev1.HostPathType)(pointer.StringPtr(string("Directory"))),
+									Type: (*corev1.HostPathType)(ptr.To(string("Directory"))),
 								},
 							},
 						},

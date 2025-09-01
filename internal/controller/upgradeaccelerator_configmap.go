@@ -95,9 +95,12 @@ func (reconciler *UpgradeAcceleratorReconciler) createReleaseConfigMap(ctx conte
 	return nil
 }
 
-func (reconciler *UpgradeAcceleratorReconciler) createPullerScriptConfigMap(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, pullerScript string) error {
+// createPullerScriptConfigMap creates a ConfigMap for the node to pull from
+// There is a default ConfigMap that is created per-release
+// The execution of this function may be skipped if the user provides a ConfigMap name override for the script
+func (reconciler *UpgradeAcceleratorReconciler) createPullerScriptConfigMap(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator) error {
 
-	configMapName := fmt.Sprintf("release-%s", "puller-script")
+	configMapName := fmt.Sprintf("release-puller-script-%s", hashName(upgradeAccelerator.Status.TargetVersion))
 	targetNamespace := UpgradeAcceleratorDefaultNamespace
 	// Check if the UpgradeAccelerator has any overrides for the namespace
 	if upgradeAccelerator.Spec.Config.Scheduling.Namespace != "" {
@@ -106,8 +109,10 @@ func (reconciler *UpgradeAcceleratorReconciler) createPullerScriptConfigMap(ctx 
 
 	// Set some basic labels
 	labels := map[string]string{
-		"app":                      "upgrade-accelerator",
-		"upgrade-accelerator/name": upgradeAccelerator.Name,
+		"app":                         "upgrade-accelerator",
+		"upgrade-accelerator/name":    upgradeAccelerator.Name,
+		"upgrade-accelerator/util":    "puller-script",
+		"upgrade-accelerator/release": upgradeAccelerator.Status.TargetVersion,
 	}
 
 	// Create the ConfigMap object

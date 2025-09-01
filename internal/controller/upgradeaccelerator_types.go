@@ -8,12 +8,13 @@ import (
 )
 
 const (
-	UpgradeAcceleratorDefaultJobPullerImage = "registry.redhat.io/rhel9/support-tools:latest"
-	UpgradeAcceleratorDefaultNamespace      = "openshift-upgrade-accelerator"
-	UpgradeAcceleratorFinalizer             = "openshift.kemo.dev/finalizer"
-	UpgradeAcceleratorDefaultParallelism    = 5
-	UpgradeAcceleratorDefaultRandomWaitMin  = 10
-	UpgradeAcceleratorDefaultRandomWaitMax  = 30
+	UpgradeAcceleratorDefaultJobPullerImage                 = "registry.redhat.io/rhel9/support-tools:latest"
+	UpgradeAcceleratorDefaultNamespace                      = "openshift-upgrade-accelerator"
+	UpgradeAcceleratorFinalizer                             = "openshift.kemo.dev/finalizer"
+	UpgradeAcceleratorDefaultParallelism                    = 5
+	UpgradeAcceleratorDefaultRandomWaitMin                  = 10
+	UpgradeAcceleratorDefaultRandomWaitMax                  = 30
+	UpgradeAcceleratorMachineConfigOperatorStatusVersionKey = "operator"
 )
 
 var (

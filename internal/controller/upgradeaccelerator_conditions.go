@@ -52,8 +52,8 @@ const (
 func (reconciler *UpgradeAcceleratorReconciler) appendCondition(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator,
 	typeName string, status metav1.ConditionStatus, reason string, message string) error {
 
-	time := metav1.Time{Time: time.Now()}
-	condition := metav1.Condition{Type: typeName, Status: status, Reason: reason, Message: message, LastTransitionTime: time}
+	currentTime := metav1.Time{Time: time.Now()}
+	condition := metav1.Condition{Type: typeName, Status: status, Reason: reason, Message: message, LastTransitionTime: currentTime}
 	// Check if the condition exists on the current upgradeAccelerator
 	// If so update it
 	// If not then append it
@@ -75,12 +75,12 @@ func (reconciler *UpgradeAcceleratorReconciler) appendCondition(ctx context.Cont
 	return reconciler.Client.Status().Update(ctx, upgradeAccelerator)
 }
 func (reconciler *UpgradeAcceleratorReconciler) deleteConditions(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator,
-	typeNames []string) error {
+	typeNames []string) (err error) {
 
 	for _, typeName := range typeNames {
-		_ = reconciler.deleteCondition(ctx, upgradeAccelerator, typeName)
+		err = reconciler.deleteCondition(ctx, upgradeAccelerator, typeName)
 	}
-	return nil
+	return err
 }
 
 func (reconciler *UpgradeAcceleratorReconciler) deleteCondition(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator,
@@ -99,23 +99,22 @@ func (reconciler *UpgradeAcceleratorReconciler) deleteCondition(ctx context.Cont
 	if err != nil {
 		log.Info("UpgradeAccelerator resource status update failed.")
 	}
-	return nil
+	return err
 }
 
-func (reconciler *UpgradeAcceleratorReconciler) containsCondition(ctx context.Context,
-	upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, typeName string) bool {
+// func (reconciler *UpgradeAcceleratorReconciler) containsCondition(ctx context.Context,
+//	upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, typeName string) bool {
+//
+//	output := false
+//	for _, condition := range upgradeAccelerator.Status.Conditions {
+//		if condition.Type == typeName {
+//			output = true
+//		}
+//	}
+//	return output
+// }
 
-	output := false
-	for _, condition := range upgradeAccelerator.Status.Conditions {
-		if condition.Type == typeName {
-			output = true
-		}
-	}
-	return output
-}
-
-func (reconciler *UpgradeAcceleratorReconciler) getConditionReason(ctx context.Context,
-	upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, typeName string) string {
+func (reconciler *UpgradeAcceleratorReconciler) getConditionReason(upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, typeName string) string {
 
 	for _, condition := range upgradeAccelerator.Status.Conditions {
 		if condition.Type == typeName {
@@ -128,7 +127,7 @@ func (reconciler *UpgradeAcceleratorReconciler) getConditionReason(ctx context.C
 func (reconciler *UpgradeAcceleratorReconciler) setConditionFailure(ctx context.Context,
 	upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, reason string, errorMessage string) error {
 	return reconciler.appendCondition(ctx, upgradeAccelerator, CONDITION_TYPE_FAILURE, CONDITION_STATUS_TRUE,
-		reason, fmt.Sprintf("%s", errorMessage))
+		reason, errorMessage)
 }
 
 func (reconciler *UpgradeAcceleratorReconciler) setConditionInfrastructureFound(ctx context.Context,

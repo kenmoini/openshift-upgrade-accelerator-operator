@@ -11,7 +11,6 @@ import (
 	kapierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -49,7 +48,7 @@ func (reconciler *UpgradeAcceleratorReconciler) createOperatorNamespace(ctx cont
 	return targetNamespace, nil
 }
 
-func (reconciler *UpgradeAcceleratorReconciler) getCurrentVersion(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator) (string, error) {
+func (reconciler *UpgradeAcceleratorReconciler) getCurrentVersion(ctx context.Context) (string, error) {
 	// Get the machine-config ClusterOperator
 	clusterOperator := &configv1.ClusterOperator{}
 	if err := reconciler.Get(ctx, types.NamespacedName{Name: "machine-config", Namespace: "openshift-machine-api"}, clusterOperator); err != nil {
@@ -58,12 +57,12 @@ func (reconciler *UpgradeAcceleratorReconciler) getCurrentVersion(ctx context.Co
 	// Get the object with the key name matching operator
 	matchedVersion := ""
 	for _, version := range clusterOperator.Status.Versions {
-		if version.Name == "operator" {
+		if version.Name == UpgradeAcceleratorMachineConfigOperatorStatusVersionKey {
 			matchedVersion = version.Version
 		}
 	}
 	if matchedVersion == "" {
-		return "", fmt.Errorf("Failed to find machine-config operator version")
+		return "", fmt.Errorf("failed to find machine-config operator version")
 	} else {
 		return matchedVersion, nil
 	}
@@ -104,7 +103,7 @@ func (reconciler *UpgradeAcceleratorReconciler) getDesiredVersion(ctx context.Co
 
 func (reconciler *UpgradeAcceleratorReconciler) getClusterVersionState(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator) (OpenShiftClusterVersionState, error) {
 	// Get the current version from the machine-config ClusterOperator
-	currentVersion, err := reconciler.getCurrentVersion(ctx, upgradeAccelerator)
+	currentVersion, err := reconciler.getCurrentVersion(ctx)
 	if err != nil {
 		return OpenShiftClusterVersionState{}, err
 	}
@@ -162,12 +161,12 @@ func hasMachineConfigClusterOperatorChanged(o *configv1.ClusterOperator, n *conf
 		// Get the .status.versions of both the old and new spec
 		oldVersion, newVersion := "", ""
 		for _, version := range oldStatus.Versions {
-			if version.Name == "operator" {
+			if version.Name == UpgradeAcceleratorMachineConfigOperatorStatusVersionKey {
 				oldVersion = version.Version
 			}
 		}
 		for _, version := range newStatus.Versions {
-			if version.Name == "operator" {
+			if version.Name == UpgradeAcceleratorMachineConfigOperatorStatusVersionKey {
 				newVersion = version.Version
 			}
 		}
@@ -185,9 +184,9 @@ func hasMachineConfigClusterOperatorChanged(o *configv1.ClusterOperator, n *conf
 
 // getOpenShiftInfrastructureType retrieves the OpenShift infrastructure type.
 // This is used to filter out any unnecessary images.
-func getOpenShiftInfrastructureType(ctx context.Context, req ctrl.Request, client client.Client) (string, error) {
+func getOpenShiftInfrastructureType(ctx context.Context, c client.Client) (string, error) {
 	infrastructure := &configv1.Infrastructure{}
-	if err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, infrastructure); err != nil {
+	if err := c.Get(ctx, types.NamespacedName{Name: "cluster"}, infrastructure); err != nil {
 		return "", err
 	}
 	return string(infrastructure.Status.PlatformStatus.Type), nil
