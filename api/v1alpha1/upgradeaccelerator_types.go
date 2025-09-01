@@ -108,9 +108,9 @@ type UpgradeAcceleratorStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	// CurrentVersion indicates the current version of OpenShift.  This is derived from the machine-config ClusterOperator.
-	CurrentVersion string `json:"currentVersion"`
+	CurrentVersion string `json:"currentVersion,omitempty"`
 	// TargetVersion indicates the target version of OpenShift that is reported by the ClusterVersion CR.
-	TargetVersion string `json:"targetVersion"`
+	TargetVersion string `json:"targetVersion,omitempty"`
 	// LastCompletedVersion indicates the last completed version of OpenShift releases pulled.
 	LastCompletedVersion string `json:"lastCompletedVersion,omitempty"`
 	// Conditions represents the latest available observations of the UpgradeAccelerator's current state.

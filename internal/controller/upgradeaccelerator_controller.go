@@ -21,17 +21,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
-
-	"dario.cat/mergo"
-	machineconfigv1 "github.com/openshift/api/machineconfiguration/v1"
 
 	configv1 "github.com/openshift/api/config/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -97,9 +92,9 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 		// Base In-Reconciler Variables
 		// ============================================================================================
 		//validMachineConfigPools := []string{}
-		validMachineConfigPoolSelectors := make(map[string]*metav1.LabelSelector)
-		targetedNodes := []string{}
-		primingProhibitedNodes := []string{}
+		//validMachineConfigPoolSelectors := make(map[string]*metav1.LabelSelector)
+		//targetedNodes := []string{}
+		//primingProhibitedNodes := []string{}
 
 		// Determine Job Puller Image
 		jobPullerImage := UpgradeAcceleratorDefaultJobPullerImage
@@ -189,166 +184,12 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 			//}
 
 			// ==========================================================================================
-			// Node Determination
-			// ==========================================================================================
-			// Get the list of nodes from the cluster, first filtering by MachineConfigPools and then by nodeSelector
-			nodes := &corev1.NodeList{}
-			if err := r.List(ctx, nodes, client.InNamespace(req.Namespace)); err != nil {
-				logger.Error(err, "Failed to list nodes")
-				_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_GET_NODES, err.Error())
-				_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
-				return ctrl.Result{RequeueAfter: time.Second * 30}, err
-			} else {
-				logger.Info("Successfully listed " + strconv.Itoa(len(nodes.Items)) + " nodes")
-			}
-
-			// ============================================================================================
-			// If there is no selector defined, then all nodes are targeted
-			if upgradeAccelerator.Spec.Selector.NodeSelector == nil && len(upgradeAccelerator.Spec.Selector.MachineConfigPools) == 0 {
-				logger.Info("No selectors defined, targeting all " + strconv.Itoa(len(nodes.Items)) + " nodes")
-				for _, node := range nodes.Items {
-					targetedNodes = append(targetedNodes, node.Name)
-				}
-			} else {
-				// ==========================================================================================
-				// Check if the spec has a machineConfigPool selector defined
-				if len(upgradeAccelerator.Spec.Selector.MachineConfigPools) > 0 {
-					logger.Info("MachineConfigPools selector definition found in UpgradeAccelerator", "definedPools", upgradeAccelerator.Spec.Selector.MachineConfigPools)
-					// Get the list of All MachineConfigPools
-					listOpts := []client.ListOption{}
-					machineConfigPools := &machineconfigv1.MachineConfigPoolList{}
-					if err := r.List(ctx, machineConfigPools, listOpts...); err != nil {
-						logger.Error(err, "Failed to list MachineConfigPools")
-						_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_GET_MACHINECONFIGPOOLS, err.Error())
-						_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
-						return ctrl.Result{RequeueAfter: time.Second * 30}, err
-					} else {
-						logger.Info("Successfully listed " + strconv.Itoa(len(machineConfigPools.Items)) + " MachineConfigPools")
-					}
-					// Extract the names from the machineConfigPools and set as a list of strings
-					for _, pool := range machineConfigPools.Items {
-						if slices.Contains(upgradeAccelerator.Spec.Selector.MachineConfigPools, pool.Name) {
-							//validMachineConfigPools = append(validMachineConfigPools, pool.Name)
-							validMachineConfigPoolSelectors[pool.Name] = pool.Spec.NodeSelector
-						}
-					}
-
-					//// Check if the MachineConfigPool defined is valid
-					//for _, pool := range upgradeAccelerator.Spec.Selector.MachineConfigPools {
-					//	if !slices.Contains(validMachineConfigPools, pool) {
-					//		logger.Error(err, "Invalid MachineConfigPool: "+pool, "pool", pool)
-					//	} else {
-					//		logger.Info("Valid MachineConfigPool: "+pool, "pool", pool)
-					//		validMachineConfigPools = append(validMachineConfigPools, pool)
-					//		// Get the NodeSelector for the MachineConfigPool
-					//		machineConfigPool := &machineconfigv1.MachineConfigPool{}
-					//		if err := r.Get(ctx, client.ObjectKey{Name: pool}, machineConfigPool); err != nil {
-					//			logger.Error(err, "Failed to get MachineConfigPool", "pool", pool)
-					//		} else {
-					//			validMachineConfigPoolSelectors[pool] = machineConfigPool.Spec.NodeSelector
-					//		}
-					//	}
-					//}
-
-					// If no valid MachineConfigPools were found, return an error
-					//if len(validMachineConfigPools) == 0 {
-					//	logger.Error(err, "No valid MachineConfigPools found - not used for filtering/selection")
-					//}
-				}
-
-				// ==========================================================================================
-				// Check if we have any existing validMachineConfigPoolSelectors
-				if len(validMachineConfigPoolSelectors) > 0 {
-					logger.Info("Matching MachineConfigPools found", "validMachineConfigPools", validMachineConfigPoolSelectors)
-				}
-
-				// ==========================================================================================
-				// Check if we have NodeSelectors applied on this UpgradeAccelerator
-				if upgradeAccelerator.Spec.Selector.NodeSelector != nil {
-					logger.Info("NodeSelector definition found in UpgradeAccelerator", "selector", upgradeAccelerator.Spec.Selector.NodeSelector)
-				}
-
-				// ==========================================================================================
-				// Merge the NodeSelector into the validMachineConfigPoolSelectors
-				if upgradeAccelerator.Spec.Selector.NodeSelector != nil && len(validMachineConfigPoolSelectors) > 0 {
-					logger.Info("List of MachineConfigPools and NodeSelectors detected - filtering valid MachineConfigPools further with defined NodeSelectors")
-					// Loop through each validMachineConfigPoolSelector and add the nodeSelector to it
-					for pool, selector := range validMachineConfigPoolSelectors {
-						if selector != nil {
-							if err := mergo.Merge(selector, upgradeAccelerator.Spec.Selector.NodeSelector); err != nil {
-								_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_SETUP, err.Error())
-								_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
-								logger.Error(err, "Failed to merge NodeSelector into MachineConfigPoolSelector", "pool", pool)
-								return ctrl.Result{RequeueAfter: time.Second * 30}, err
-							}
-						}
-					}
-					logger.Info("Merged NodeSelector into MachineConfigPoolSelectors", "selectors", validMachineConfigPoolSelectors)
-				}
-
-				// Next, assemble the list of targetedNodes
-				// If there are nodeSelectors but not machineConfigPools defined, simply filter by the nodeSelectors
-				if upgradeAccelerator.Spec.Selector.NodeSelector != nil && len(validMachineConfigPoolSelectors) == 0 {
-					// Get the list of nodes that match the nodeSelector
-					nodeList := &corev1.NodeList{}
-					if err := r.List(ctx, nodeList, client.MatchingLabels(upgradeAccelerator.Spec.Selector.NodeSelector.MatchLabels)); err != nil {
-						logger.Error(err, "Failed to list nodes", "selector", upgradeAccelerator.Spec.Selector.NodeSelector)
-						_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_GET_NODES, err.Error())
-						_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
-						return ctrl.Result{RequeueAfter: time.Second * 30}, err
-					} else {
-						for _, node := range nodeList.Items {
-							// Make sure that the node does not have the openshift.kemo.dev/disable-preheat: "true" label
-							excludeLabelValue, ok := node.Labels["openshift.kemo.dev/disable-preheat"]
-							if ok && strings.ToLower(excludeLabelValue) == "true" {
-								logger.Info("Node has openshift.kemo.dev/disable-preheat: \"true\" label, skipping", "node", node.Name)
-							} else {
-								// If this node has priming explicitly disabled, add it to the primingProhibitedNodes
-								primingLabelValue, ok := node.Labels["openshift.kemo.dev/primer-node"]
-								if ok && strings.ToLower(primingLabelValue) == "false" {
-									primingProhibitedNodes = append(primingProhibitedNodes, node.Name)
-								}
-								targetedNodes = append(targetedNodes, node.Name)
-							}
-						}
-					}
-				}
-				// If both nodeSelectors and machineConfigPools are defined, then loop through the validMachineConfigPoolSelectors and assemble the targetedNodes
-				if len(validMachineConfigPoolSelectors) > 0 {
-					for _, selector := range validMachineConfigPoolSelectors {
-						if selector != nil {
-							// Get the list of nodes that match the MachineConfigPool's NodeSelector
-							nodeList := &corev1.NodeList{}
-							if err := r.List(ctx, nodeList, client.MatchingLabels(selector.MatchLabels)); err != nil {
-								logger.Error(err, "Failed to list nodes", "selector", selector)
-								_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_GET_NODES, err.Error())
-								_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
-								return ctrl.Result{RequeueAfter: time.Second * 30}, err
-							} else {
-								for _, node := range nodeList.Items {
-									// Make sure that the node does not have the openshift.kemo.dev/disable-preheat: "true" label
-									excludeLabelValue, ok := node.Labels["openshift.kemo.dev/disable-preheat"]
-									if ok && strings.ToLower(excludeLabelValue) == "true" {
-										logger.Info("Node has openshift.kemo.dev/disable-preheat: \"true\" label, skipping", "node", node.Name)
-									} else {
-										// If this node has priming explicitly disabled, add it to the primingProhibitedNodes
-										primingLabelValue, ok := node.Labels["openshift.kemo.dev/primer-node"]
-										if ok && strings.ToLower(primingLabelValue) == "false" {
-											primingProhibitedNodes = append(primingProhibitedNodes, node.Name)
-										}
-										targetedNodes = append(targetedNodes, node.Name)
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-
-			// ==========================================================================================
 			// Targeted Nodes State Determination
 			// ==========================================================================================
+			targetedNodes, prohibitedNodes, primingProhibitedNodes, err := r.determineTargetedNodes(ctx, upgradeAccelerator, &logger)
 			logger.Info("List of final targetedNodes", "targetedNodes", targetedNodes)
+			logger.Info("List of final prohibitedNodes", "prohibitedNodes", prohibitedNodes)
+			logger.Info("List of final primingProhibitedNodes", "primingProhibitedNodes", primingProhibitedNodes)
 			if len(targetedNodes) == 0 {
 				logger.Info("No targeted nodes found")
 				upgradeAccelerator.Status.NodesSelected = nil
@@ -446,71 +287,74 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 			// ==========================================================================================
 			// Determine Node List States
+			// Tip: Exit as early as possible from determined end states
 			// ==========================================================================================
 			upgradeAcceleratorStatusChanged = false
 
-			//if upgradeAccelerator.Status.LastCompletedVersion == upgradeAccelerator.Status.TargetVersion {
-			//	upgradeAccelerator.Status.NodesWaiting = nil
-			//	upgradeAccelerator.Status.NodesWarming = nil
-			//	upgradeAccelerator.Status.NodesPreheated = nil
-			//	upgradeAccelerator.Status.PrimerNodes = nil
-			//}
-			if upgradeAccelerator.Status.LastCompletedVersion != "" {
+			// WTF is this code?  I should have slept sooner...
+			// if upgradeAccelerator.Status.LastCompletedVersion != "" {
+			// 	if upgradeAccelerator.Status.LastCompletedVersion == upgradeAccelerator.Status.TargetVersion {
+			// 		upgradeAccelerator.Status.NodesWaiting = nil
+			// 		upgradeAccelerator.Status.NodesWarming = nil
+			// 		upgradeAccelerator.Status.NodesPreheated = nil
+			// 		upgradeAccelerator.Status.PrimerNodes = nil
+			// 	}
+			// }
 
-				// If the lastCompletedVersion not is equal to the targetVersion then clear out the nodeLists
-				if upgradeAccelerator.Status.LastCompletedVersion != upgradeAccelerator.Status.TargetVersion {
-					if upgradeAccelerator.Status.NodesWaiting != nil {
-						upgradeAcceleratorStatusChanged = true
-						upgradeAccelerator.Status.NodesWaiting = nil
-					}
-					if upgradeAccelerator.Status.NodesWarming != nil {
-						upgradeAcceleratorStatusChanged = true
-						upgradeAccelerator.Status.NodesWarming = nil
-					}
-					if upgradeAccelerator.Status.NodesPreheated != nil {
-						upgradeAcceleratorStatusChanged = true
-						upgradeAccelerator.Status.NodesPreheated = nil
-					}
-					if upgradeAccelerator.Status.PrimerNodes != nil {
-						upgradeAcceleratorStatusChanged = true
-						upgradeAccelerator.Status.PrimerNodes = nil
-					}
-					logger.Info("New target version detected, resetting node status lists", "lastCompletedVersion", upgradeAccelerator.Status.LastCompletedVersion, "targetVersion", upgradeAccelerator.Status.TargetVersion)
-				} else {
-					// If the lastCompletedVersion is equal to the targetVersion then clear out the nodeLists and finish reconciliation
-					if upgradeAccelerator.Status.NodesWaiting != nil {
-						upgradeAcceleratorStatusChanged = true
-						upgradeAccelerator.Status.NodesWaiting = nil
-					}
-					if upgradeAccelerator.Status.NodesWarming != nil {
-						upgradeAcceleratorStatusChanged = true
-						upgradeAccelerator.Status.NodesWarming = nil
-					}
-					if upgradeAccelerator.Status.NodesPreheated != nil {
-						upgradeAcceleratorStatusChanged = true
-						upgradeAccelerator.Status.NodesPreheated = nil
-					}
-					if upgradeAccelerator.Status.PrimerNodes != nil {
-						upgradeAcceleratorStatusChanged = true
-						upgradeAccelerator.Status.PrimerNodes = nil
-					}
-					logger.Info("No new target version detected, all nodes preheated for target version", "lastCompletedVersion", upgradeAccelerator.Status.LastCompletedVersion, "targetVersion", upgradeAccelerator.Status.TargetVersion)
+			// 	// If the lastCompletedVersion not is equal to the targetVersion then clear out the nodeLists
+			// 	if upgradeAccelerator.Status.LastCompletedVersion != upgradeAccelerator.Status.TargetVersion {
+			// 		if upgradeAccelerator.Status.NodesWaiting != nil {
+			// 			upgradeAcceleratorStatusChanged = true
+			// 			upgradeAccelerator.Status.NodesWaiting = nil
+			// 		}
+			// 		if upgradeAccelerator.Status.NodesWarming != nil {
+			// 			upgradeAcceleratorStatusChanged = true
+			// 			upgradeAccelerator.Status.NodesWarming = nil
+			// 		}
+			// 		if upgradeAccelerator.Status.NodesPreheated != nil {
+			// 			upgradeAcceleratorStatusChanged = true
+			// 			upgradeAccelerator.Status.NodesPreheated = nil
+			// 		}
+			// 		if upgradeAccelerator.Status.PrimerNodes != nil {
+			// 			upgradeAcceleratorStatusChanged = true
+			// 			upgradeAccelerator.Status.PrimerNodes = nil
+			// 		}
+			// 		logger.Info("New target version detected, resetting node status lists", "lastCompletedVersion", upgradeAccelerator.Status.LastCompletedVersion, "targetVersion", upgradeAccelerator.Status.TargetVersion)
+			// 	} else {
+			// 		// If the lastCompletedVersion is equal to the targetVersion then clear out the nodeLists and finish reconciliation
+			// 		if upgradeAccelerator.Status.NodesWaiting != nil {
+			// 			upgradeAcceleratorStatusChanged = true
+			// 			upgradeAccelerator.Status.NodesWaiting = nil
+			// 		}
+			// 		if upgradeAccelerator.Status.NodesWarming != nil {
+			// 			upgradeAcceleratorStatusChanged = true
+			// 			upgradeAccelerator.Status.NodesWarming = nil
+			// 		}
+			// 		if upgradeAccelerator.Status.NodesPreheated != nil {
+			// 			upgradeAcceleratorStatusChanged = true
+			// 			upgradeAccelerator.Status.NodesPreheated = nil
+			// 		}
+			// 		if upgradeAccelerator.Status.PrimerNodes != nil {
+			// 			upgradeAcceleratorStatusChanged = true
+			// 			upgradeAccelerator.Status.PrimerNodes = nil
+			// 		}
+			// 		logger.Info("No new target version detected, all nodes preheated for target version", "lastCompletedVersion", upgradeAccelerator.Status.LastCompletedVersion, "targetVersion", upgradeAccelerator.Status.TargetVersion)
 
-					if upgradeAcceleratorStatusChanged {
-						err = r.Status().Update(ctx, upgradeAccelerator)
-						if err != nil {
-							logger.Error(err, "Failed to update UpgradeAccelerator status")
-							return ctrl.Result{RequeueAfter: time.Second * 30}, err
-						}
-						// Refetch the UpgradeAccelerator
-						if err := r.Get(ctx, req.NamespacedName, upgradeAccelerator); err != nil {
-							logger.Error(err, "Failed to re-fetch UpgradeAccelerator")
-							return ctrl.Result{RequeueAfter: time.Second * 30}, err
-						}
-						//return ctrl.Result{RequeueAfter: time.Second * 15}, nil
-					}
-				}
-			}
+			// 		if upgradeAcceleratorStatusChanged {
+			// 			err = r.Status().Update(ctx, upgradeAccelerator)
+			// 			if err != nil {
+			// 				logger.Error(err, "Failed to update UpgradeAccelerator status")
+			// 				return ctrl.Result{RequeueAfter: time.Second * 30}, err
+			// 			}
+			// 			// Refetch the UpgradeAccelerator
+			// 			if err := r.Get(ctx, req.NamespacedName, upgradeAccelerator); err != nil {
+			// 				logger.Error(err, "Failed to re-fetch UpgradeAccelerator")
+			// 				return ctrl.Result{RequeueAfter: time.Second * 30}, err
+			// 			}
+			// 			//return ctrl.Result{RequeueAfter: time.Second * 15}, nil
+			// 		}
+			// 	}
+			// }
 
 			if upgradeAcceleratorStatusChanged {
 				err = r.Status().Update(ctx, upgradeAccelerator)
@@ -539,13 +383,14 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 						logger.Error(err, "Failed to list nodes", "selector", upgradeAccelerator.Spec.Selector.NodeSelector)
 						return ctrl.Result{RequeueAfter: time.Second * 30}, err
 					} else {
+						// Labeled Nodes are listed - add manually set primer nodes
 						for _, node := range nodeList.Items {
 							primerNodes = append(primerNodes, node.Name)
 						}
 					}
-					// If no manually set primer nodes, then just pick one from the targeted nodes if it's not part of the primingProhibitedNodes list
+					// If no manually set primer nodes, then just pick one from the targeted nodes if it's not part of the primingProhibitedNodes list or already in the primerNodes list
 					for _, tNode := range targetedNodes {
-						if !slices.Contains(primingProhibitedNodes, tNode) {
+						if !slices.Contains(primingProhibitedNodes, tNode) && !slices.Contains(primerNodes, tNode) {
 							primerNodes = append(primerNodes, tNode)
 						}
 					}
@@ -584,6 +429,9 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 				// ==========================================================================================
 				// Primer Node Scheduling
+				// Loop through the selected primer nodes
+				// Check if they're in the nodesWaiting list
+				// Check if they're already warming or preheated
 				// ==========================================================================================
 				if upgradeAccelerator.Spec.Prime && len(primerNodes) > 0 {
 					// Loop through each node and schedule a Pod
