@@ -50,6 +50,15 @@ spec:
                       JobImage is the image used for the upgrade jobs.
                       Defaults to registry.redhat.io/rhel9/support-tools:latest
                     type: string
+                  overrideReleaseVersion:
+                    description: OverrideReleaseVersion allows for specifying a different
+                      release version to be pulled.
+                    properties:
+                      image:
+                        type: string
+                      version:
+                        type: string
+                    type: object
                   randomWait:
                     description: RandomWait allows for adding a random wait time before
                       starting the image pulling.
@@ -265,6 +274,10 @@ spec:
                   INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
                   Important: Run "make" to regenerate code after modifying this file
                   CurrentVersion indicates the current version of OpenShift.  This is derived from the machine-config ClusterOperator.
+                type: string
+              lastCompletedVersion:
+                description: LastCompletedVersion indicates the last completed version
+                  of OpenShift releases pulled.
                 type: string
               nodesPreheated:
                 description: NodesPreheated is a list of nodes that have been preheated

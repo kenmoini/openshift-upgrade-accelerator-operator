@@ -76,6 +76,94 @@ func GetReleaseImages(releaseImage string) ([]ReleaseImageTags, error) {
 	return jsonData, nil
 }
 
+func runOCCommandGetReleaseImageFromVersion(releaseVersion string) (outputLinesStr string, err error) {
+	outputLines := []string{}
+	outputLinesStr = ""
+
+	cmdLine := "oc adm release info " + releaseVersion + " -o jsonpath='{.image}'"
+
+	cmd := exec.Command("/bin/sh", "-c", cmdLine)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", err
+	}
+
+	scanner := bufio.NewScanner(stdout)
+	// Bigger buffer size for scanner
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+
+	err = cmd.Start()
+	if err != nil {
+		return "", err
+	}
+
+	for scanner.Scan() {
+		// Do something with the line here.
+		outputLines = append(outputLines, scanner.Text())
+	}
+	if scanner.Err() != nil {
+		cmd.Process.Kill()
+		cmd.Wait()
+		return "", scanner.Err()
+	}
+	// Join the lines together
+	outputLinesStr = strings.Join(outputLines, "")
+	return outputLinesStr, cmd.Wait()
+}
+
+func GetReleaseImageFromVersion(releaseVersion string) (string, error) {
+	outputLines, err := runOCCommandGetReleaseImageFromVersion(releaseVersion)
+	if err != nil {
+		return "", err
+	}
+	return outputLines, nil
+}
+
+func runOCCommandGetReleaseVersionFromImage(releaseImage string) (outputLinesStr string, err error) {
+	outputLines := []string{}
+	outputLinesStr = ""
+
+	cmdLine := "oc adm release info " + releaseImage + " -o jsonpath='{.metadata.version}'"
+
+	cmd := exec.Command("/bin/sh", "-c", cmdLine)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", err
+	}
+
+	scanner := bufio.NewScanner(stdout)
+	// Bigger buffer size for scanner
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+
+	err = cmd.Start()
+	if err != nil {
+		return "", err
+	}
+
+	for scanner.Scan() {
+		// Do something with the line here.
+		outputLines = append(outputLines, scanner.Text())
+	}
+	if scanner.Err() != nil {
+		cmd.Process.Kill()
+		cmd.Wait()
+		return "", scanner.Err()
+	}
+	// Join the lines together
+	outputLinesStr = strings.Join(outputLines, "")
+	return outputLinesStr, cmd.Wait()
+}
+
+func GetReleaseVersionFromImage(releaseImage string) (string, error) {
+	outputLines, err := runOCCommandGetReleaseVersionFromImage(releaseImage)
+	if err != nil {
+		return "", err
+	}
+	return outputLines, nil
+}
+
 func FilterReleaseImages(releaseImages []ReleaseImageTags, infrastructureType string) []ReleaseImageTags {
 	var filteredReleaseImageTags []ReleaseImageTags
 	var filterMatch *regexp.Regexp

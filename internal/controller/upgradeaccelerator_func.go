@@ -70,6 +70,30 @@ func (reconciler *UpgradeAcceleratorReconciler) getCurrentVersion(ctx context.Co
 }
 
 func (reconciler *UpgradeAcceleratorReconciler) getDesiredVersion(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator) (string, string, error) {
+
+	// Check if there is an override for the desired version
+	if upgradeAccelerator.Spec.Config.OverrideReleaseVersion.Version != "" && upgradeAccelerator.Spec.Config.OverrideReleaseVersion.Image != "" {
+		return upgradeAccelerator.Spec.Config.OverrideReleaseVersion.Version, upgradeAccelerator.Spec.Config.OverrideReleaseVersion.Image, nil
+	}
+	// Check if we need to determine the image from the release version
+	if upgradeAccelerator.Spec.Config.OverrideReleaseVersion.Version != "" && upgradeAccelerator.Spec.Config.OverrideReleaseVersion.Image == "" {
+		// Get the release image from the version
+		releaseImage, err := GetReleaseImageFromVersion(upgradeAccelerator.Spec.Config.OverrideReleaseVersion.Version)
+		if err != nil {
+			return "", "", err
+		}
+		return upgradeAccelerator.Spec.Config.OverrideReleaseVersion.Version, releaseImage, nil
+	}
+	// Alternatively, check if the version needs to be determined from the image
+	if upgradeAccelerator.Spec.Config.OverrideReleaseVersion.Image != "" && upgradeAccelerator.Spec.Config.OverrideReleaseVersion.Version == "" {
+		// Get the release version from the image
+		releaseVersion, err := GetReleaseVersionFromImage(upgradeAccelerator.Spec.Config.OverrideReleaseVersion.Image)
+		if err != nil {
+			return "", "", err
+		}
+		return releaseVersion, upgradeAccelerator.Spec.Config.OverrideReleaseVersion.Image, nil
+	}
+
 	// Get the ClusterVersion
 	clusterVersion := &configv1.ClusterVersion{}
 	if err := reconciler.Get(ctx, types.NamespacedName{Name: "version", Namespace: "openshift-cluster-version"}, clusterVersion); err != nil {

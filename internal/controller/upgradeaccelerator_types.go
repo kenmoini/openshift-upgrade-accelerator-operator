@@ -1,22 +1,32 @@
 package controller
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
 	UpgradeAcceleratorDefaultJobPullerImage = "registry.redhat.io/rhel9/support-tools:latest"
 	UpgradeAcceleratorDefaultNamespace      = "openshift-upgrade-accelerator"
+	UpgradeAcceleratorFinalizer             = "openshift.kemo.dev/finalizer"
 	UpgradeAcceleratorDefaultParallelism    = 5
 	UpgradeAcceleratorDefaultRandomWaitMin  = 10
 	UpgradeAcceleratorDefaultRandomWaitMax  = 30
 )
 
+var (
+	UpgradeAcceleratorDefaultJobTolerations = []corev1.Toleration{{
+		Operator: corev1.TolerationOpExists,
+	}}
+)
+
 // UpgradeAcceleratorReconciler reconciles a UpgradeAccelerator object
 type UpgradeAcceleratorReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // ReleaseImageTags represents the release image tags used for upgrades

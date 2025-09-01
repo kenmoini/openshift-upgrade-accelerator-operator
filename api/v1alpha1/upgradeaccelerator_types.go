@@ -59,6 +59,14 @@ type UpgradeAcceleratorConfig struct {
 	// +kubebuilder:default:="registry.redhat.io/rhel9/support-tools:latest"
 	// +optional
 	JobImage string `json:"jobImage,omitempty"`
+	// OverrideReleaseVersion allows for specifying a different release version to be pulled.
+	// +optional
+	OverrideReleaseVersion OverrideReleaseVersion `json:"overrideReleaseVersion,omitempty"`
+}
+
+type OverrideReleaseVersion struct {
+	Version string `json:"version,omitempty"`
+	Image   string `json:"image,omitempty"`
 }
 
 type UpgradeAcceleratorConfigRandomWait struct {
@@ -103,6 +111,8 @@ type UpgradeAcceleratorStatus struct {
 	CurrentVersion string `json:"currentVersion"`
 	// TargetVersion indicates the target version of OpenShift that is reported by the ClusterVersion CR.
 	TargetVersion string `json:"targetVersion"`
+	// LastCompletedVersion indicates the last completed version of OpenShift releases pulled.
+	LastCompletedVersion string `json:"lastCompletedVersion,omitempty"`
 	// Conditions represents the latest available observations of the UpgradeAccelerator's current state.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// NodesSelected is a list of nodes that match the selector criteria.

@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type PullJob struct {
@@ -45,6 +46,8 @@ func (reconciler *UpgradeAcceleratorReconciler) createPullJob(ctx context.Contex
 		{Name: "PULL_JOB_CONFIGMAP", Value: pullJob.ConfigMapName},
 	}
 	envProxyConfig := proxy.ReadProxyVarsFromEnv()
+	logger := logf.FromContext(ctx)
+	logger.Info("Proxy Environment Variables: ", "vars", envProxyConfig)
 	baseEnvVars = append(baseEnvVars, envProxyConfig...)
 
 	jobConstructor := &batchv1.Job{
@@ -58,6 +61,7 @@ func (reconciler *UpgradeAcceleratorReconciler) createPullJob(ctx context.Contex
 					HostNetwork:   true,
 					HostIPC:       true,
 					NodeName:      pullJob.TargetNodeName,
+					Tolerations:   UpgradeAcceleratorDefaultJobTolerations,
 					Containers: []corev1.Container{
 						corev1.Container{
 							Name:    "preheater",
@@ -69,6 +73,9 @@ func (reconciler *UpgradeAcceleratorReconciler) createPullJob(ctx context.Contex
 							SecurityContext: &corev1.SecurityContext{
 								Privileged: pointer.BoolPtr(true),
 								RunAsUser:  pointer.Int64Ptr(0),
+								SeccompProfile: &corev1.SeccompProfile{
+									Type: corev1.SeccompProfileTypeUnconfined,
+								},
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
@@ -122,6 +129,11 @@ func (reconciler *UpgradeAcceleratorReconciler) createPullJob(ctx context.Contex
 				},
 			},
 		},
+	}
+
+	// Tolerations
+	if len(upgradeAccelerator.Spec.Config.Scheduling.Tolerations) > 0 {
+		jobConstructor.Spec.Template.Spec.Tolerations = upgradeAccelerator.Spec.Config.Scheduling.Tolerations
 	}
 
 	// Check to see if the Job exists already
