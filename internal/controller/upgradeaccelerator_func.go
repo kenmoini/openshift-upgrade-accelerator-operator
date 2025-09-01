@@ -192,8 +192,8 @@ func getOpenShiftInfrastructureType(ctx context.Context, c client.Client) (strin
 	return string(infrastructure.Status.PlatformStatus.Type), nil
 }
 
-// hashName generates a short 8 character SHA256 hash of an input string
-func hashName(name string) string {
+// hashString generates a short 8 character SHA256 hash of an input string
+func hashString(name string) string {
 	h := sha256.New()
 	h.Write([]byte(name))
 	return fmt.Sprintf("%x", h.Sum(nil))[:8]

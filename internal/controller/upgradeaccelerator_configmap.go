@@ -100,7 +100,7 @@ func (reconciler *UpgradeAcceleratorReconciler) createReleaseConfigMap(ctx conte
 // The execution of this function may be skipped if the user provides a ConfigMap name override for the script
 func (reconciler *UpgradeAcceleratorReconciler) createPullerScriptConfigMap(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator) error {
 
-	configMapName := fmt.Sprintf("release-puller-script-%s", hashName(upgradeAccelerator.Status.TargetVersion))
+	configMapName := fmt.Sprintf("release-puller-script-%s", hashString(upgradeAccelerator.Status.TargetVersion))
 	targetNamespace := UpgradeAcceleratorDefaultNamespace
 	// Check if the UpgradeAccelerator has any overrides for the namespace
 	if upgradeAccelerator.Spec.Config.Scheduling.Namespace != "" {

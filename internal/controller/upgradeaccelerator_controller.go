@@ -436,7 +436,7 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 						// Make sure the node isn't already preheated
 						if !slices.Contains(upgradeAccelerator.Status.NodesWarming, pNode) || !slices.Contains(upgradeAccelerator.Status.NodesPreheated, pNode) {
 							err = r.createPullJob(ctx, upgradeAccelerator, PullJob{
-								Name:           fmt.Sprintf("%s-ua-puller-%s", pNode, hashName(upgradeAccelerator.Name)),
+								Name:           fmt.Sprintf("%s-ua-puller-%s", pNode, hashString(upgradeAccelerator.Name)),
 								Namespace:      operatorNamespace,
 								ContainerImage: jobPullerImage,
 								ConfigMapName:  fmt.Sprintf("release-%s", clusterVersionState.DesiredVersion),
@@ -495,7 +495,7 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 						// Make sure the node isn't already preheated
 						if !slices.Contains(upgradeAccelerator.Status.NodesWarming, pNode) || !slices.Contains(upgradeAccelerator.Status.NodesPreheated, pNode) {
 							err = r.createPullJob(ctx, upgradeAccelerator, PullJob{
-								Name:           fmt.Sprintf("%s-ua-puller-%s", pNode, hashName(upgradeAccelerator.Name)),
+								Name:           fmt.Sprintf("%s-ua-puller-%s", pNode, hashString(upgradeAccelerator.Name)),
 								Namespace:      operatorNamespace,
 								ContainerImage: jobPullerImage,
 								ConfigMapName:  fmt.Sprintf("release-%s", clusterVersionState.DesiredVersion),
