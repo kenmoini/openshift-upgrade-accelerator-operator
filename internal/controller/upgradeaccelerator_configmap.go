@@ -18,6 +18,7 @@ const (
 set -euo pipefail
 export TOTAL_RELEASE_IMAGE_LIST=$(cat /etc/upgrade-accelerator/release/total_release_image_list.json)
 export FILTERED_RELEASE_IMAGE_LIST=$(cat /etc/upgrade-accelerator/release/filtered_release_image_list.json)
+
 chroot /host /bin/bash <<EOT
 export PULL_BINARY=` + DefaultPullBinary + `
 export KUBECONFIG=/etc/kubernetes/static-pod-resources/kube-apiserver-certs/secrets/node-kubeconfigs/localhost.kubeconfig;
@@ -34,9 +35,9 @@ echo "===== PULLER SCRIPT FINISHED ====="
 )
 
 // createReleaseConfigMap creates a ConfigMap in the upgradeAccelerator Namespace
-func (reconciler *UpgradeAcceleratorReconciler) createReleaseConfigMap(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, releaseVersion string, totalList string, filteredList string) error {
+func (reconciler *UpgradeAcceleratorReconciler) createReleaseConfigMap(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, totalList string, filteredList string) error {
 
-	configMapName := fmt.Sprintf("release-%s", releaseVersion)
+	configMapName := fmt.Sprintf("release-%s", hashString(upgradeAccelerator.Status.DesiredVersion))
 	targetNamespace := UpgradeAcceleratorDefaultNamespace
 	// Check if the UpgradeAccelerator has any overrides for the namespace
 	if upgradeAccelerator.Spec.Config.Scheduling.Namespace != "" {
@@ -46,7 +47,7 @@ func (reconciler *UpgradeAcceleratorReconciler) createReleaseConfigMap(ctx conte
 	// Set some basic labels
 	labels := map[string]string{
 		"app":                                "upgrade-accelerator",
-		"upgrade-accelerator/releaseVersion": releaseVersion,
+		"upgrade-accelerator/releaseVersion": upgradeAccelerator.Status.DesiredVersion,
 		"upgrade-accelerator/name":           upgradeAccelerator.Name,
 	}
 
@@ -100,7 +101,7 @@ func (reconciler *UpgradeAcceleratorReconciler) createReleaseConfigMap(ctx conte
 // The execution of this function may be skipped if the user provides a ConfigMap name override for the script
 func (reconciler *UpgradeAcceleratorReconciler) createPullerScriptConfigMap(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator) error {
 
-	configMapName := fmt.Sprintf("release-puller-script-%s", hashString(upgradeAccelerator.Status.TargetVersion))
+	configMapName := fmt.Sprintf("release-puller-script-%s", hashString(upgradeAccelerator.Status.DesiredVersion))
 	targetNamespace := UpgradeAcceleratorDefaultNamespace
 	// Check if the UpgradeAccelerator has any overrides for the namespace
 	if upgradeAccelerator.Spec.Config.Scheduling.Namespace != "" {
@@ -112,7 +113,7 @@ func (reconciler *UpgradeAcceleratorReconciler) createPullerScriptConfigMap(ctx 
 		"app":                         "upgrade-accelerator",
 		"upgrade-accelerator/name":    upgradeAccelerator.Name,
 		"upgrade-accelerator/util":    "puller-script",
-		"upgrade-accelerator/release": upgradeAccelerator.Status.TargetVersion,
+		"upgrade-accelerator/release": upgradeAccelerator.Status.DesiredVersion,
 	}
 
 	// Create the ConfigMap object

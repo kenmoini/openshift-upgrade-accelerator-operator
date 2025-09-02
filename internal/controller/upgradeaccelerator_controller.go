@@ -18,24 +18,24 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
 
-	configv1 "github.com/openshift/api/config/v1"
+	//configv1 "github.com/openshift/api/config/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
+	//corev1 "k8s.io/api/core/v1"
+	//"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
+
+	//"sigs.k8s.io/controller-runtime/pkg/handler"
 
 	// logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	//"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	openshiftv1alpha1 "github.com/kenmoini/openshift-upgrade-accelerator-operator/api/v1alpha1"
 )
@@ -90,11 +90,6 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 		// ============================================================================================
 		// Base In-Reconciler Variables
 		// ============================================================================================
-		// Determine Job Puller Image
-		jobPullerImage := UpgradeAcceleratorDefaultJobPullerImage
-		if upgradeAccelerator.Spec.Config.JobImage != "" {
-			jobPullerImage = upgradeAccelerator.Spec.Config.JobImage
-		}
 
 		// ============================================================================================
 		// State Check: Check if this UpdateAccelerator is enabled or not
@@ -126,70 +121,51 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 			}
 
 			logger.Info("OpenShift Infrastructure Type: " + clusterInfrastructureType)
-			_ = r.setConditionInfrastructureFound(ctx, upgradeAccelerator, clusterInfrastructureType)
+			// Update/Refetch the UpgradeAccelerator
+			if upgradeAccelerator.Status.ClusterInfrastructure != clusterInfrastructureType {
+				upgradeAccelerator.Status.ClusterInfrastructure = clusterInfrastructureType
+				_ = r.setConditionInfrastructureFound(ctx, upgradeAccelerator, clusterInfrastructureType)
 
-			// Cluster Version State
-			clusterVersionState, err := r.getClusterVersionState(ctx, upgradeAccelerator)
+				if err := r.Get(ctx, req.NamespacedName, upgradeAccelerator); err != nil {
+					logger.Error(err, "Failed to re-fetch UpgradeAccelerator after nodesSelected")
+					return ctrl.Result{RequeueAfter: time.Second * 30}, err
+				}
+			}
+
+			// ==========================================================================================
+			// Cluster Version State Determination
+			clusterVersionState, changed, err := r.setupClusterVersion(ctx, upgradeAccelerator, &logger)
 			if err != nil {
-				logger.Error(err, "Failed to get Cluster Version State")
-				_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_GET_CLUSTER_VERSION, err.Error())
-				_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
+				logger.Error(err, "Failed to setup Cluster Version")
+				_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_SETUP, err.Error())
+				_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_RUNNING, CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
 				return ctrl.Result{RequeueAfter: time.Second * 30}, err
 			}
-			logger.Info("Cluster Version State", "state", clusterVersionState)
-
-			// Set the UpgradeAcceleratorStatus for the CurrentVersion and TargetVersion
-			upgradeAcceleratorStatusChanged := false
-			if upgradeAccelerator.Status.CurrentVersion != clusterVersionState.CurrentVersion {
-				upgradeAccelerator.Status.CurrentVersion = clusterVersionState.CurrentVersion
-				upgradeAcceleratorStatusChanged = true
-				logger.V(1).Info("Updated UpgradeAccelerator status with currentVersion")
-			}
-			if upgradeAccelerator.Status.TargetVersion != clusterVersionState.DesiredVersion {
-				upgradeAccelerator.Status.TargetVersion = clusterVersionState.DesiredVersion
-				upgradeAcceleratorStatusChanged = true
-				logger.V(1).Info("Updated UpgradeAccelerator status with targetVersion")
-			}
-			if upgradeAcceleratorStatusChanged {
-				err = r.Status().Update(ctx, upgradeAccelerator)
-				if err != nil {
-					logger.Error(err, "Failed to update UpgradeAccelerator status for versions")
-					return ctrl.Result{RequeueAfter: time.Second * 30}, err
-				}
-
-				// Let's re-fetch the UpgradeAccelerator Custom Resource after updating the status
-				// so that we have the latest state of the resource on the cluster and we will avoid
-				// raising the error "the object has been modified, please apply
-				// your changes to the latest version and try again" which would re-trigger the reconciliation
-				// if we try to update it again in the following operations
+			if changed {
+				// Refetch the UpgradeAccelerator
 				if err := r.Get(ctx, req.NamespacedName, upgradeAccelerator); err != nil {
-					logger.Error(err, "Failed to re-fetch UpgradeAccelerator")
+					logger.Error(err, "Failed to re-fetch UpgradeAccelerator after nodesSelected")
 					return ctrl.Result{RequeueAfter: time.Second * 30}, err
 				}
 			}
-			// upgradeAcceleratorStatusChanged = false
-
-			// Check if the Current Version is the Desired Version - if so, no need to proceed
-			// PROD: This is enabled in production deployments
-			// Not helpful for debugging full flow but nice to not make the cluster do things it doesn't need to
-			// if clusterVersionState.CurrentVersion == clusterVersionState.DesiredVersion {
-			//	logger.Info("No upgrades in progress, no action required")
-			//	return ctrl.Result{RequeueAfter: time.Second * 30}, nil
-			// }
 
 			// ==========================================================================================
 			// Targeted Nodes State Determination
-			// ==========================================================================================
-			targetedNodes, prohibitedNodes, primingProhibitedNodes, err := r.determineTargetedNodes(ctx, upgradeAccelerator, &logger)
+			targetedNodes, prohibitedNodes, primerNodes, primingProhibitedNodes, err := r.determineTargetedNodes(ctx, upgradeAccelerator, &logger)
 			if err != nil {
 				logger.Error(err, "Failed to determine targeted nodes")
 				return ctrl.Result{RequeueAfter: time.Second * 30}, err
 			}
 			logger.Info("List of final targetedNodes", "targetedNodes", targetedNodes)
+			logger.Info("List of final primerNodes", "primerNodes", primerNodes)
 			logger.Info("List of final prohibitedNodes", "prohibitedNodes", prohibitedNodes)
 			logger.Info("List of final primingProhibitedNodes", "primingProhibitedNodes", primingProhibitedNodes)
+
+			// ==========================================================================================
+			// Initial State Checks
+			// If there are no targeted nodes, we do nothing, just reset
 			if len(targetedNodes) == 0 {
-				logger.Info("No targeted nodes found")
+				logger.Info("No targeted nodes found, exiting")
 				upgradeAccelerator.Status.NodesSelected = nil
 				upgradeAccelerator.Status.NodesPreheated = nil
 				upgradeAccelerator.Status.NodesWaiting = nil
@@ -199,7 +175,32 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 				_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
 				return ctrl.Result{RequeueAfter: time.Second * 30}, nil
 			} else {
+				// There are targeted nodes!
+				// Update some statuses and conditions
+				// ========================================================================================
+				// Wholesale apply some determined node lists
 				upgradeAccelerator.Status.NodesSelected = targetedNodes
+				upgradeAccelerator.Status.PrimerNodes = primerNodes
+
+				// Primer Checks
+				if len(primerNodes) == 0 {
+					_ = r.setConditionPrimerSkipped(ctx, upgradeAccelerator, "Priming effectively disabled")
+				} else {
+					// Loop through all the primer nodes and check if they're in the NodesPreheated list
+					// If all of them are we are done priming
+					// If any of them are not then priming is still in progress - but this is condition is set later when we're scheduling things
+					stillWaitingOnPrimerNodes := false
+					for _, pn := range primerNodes {
+						if !slices.Contains(upgradeAccelerator.Status.NodesPreheated, pn) {
+							stillWaitingOnPrimerNodes = true
+							break
+						}
+					}
+					if !stillWaitingOnPrimerNodes {
+						_ = r.setConditionPrimerCompleted(ctx, upgradeAccelerator, "All primer nodes are preheated")
+					}
+				}
+
 				err = r.Status().Update(ctx, upgradeAccelerator)
 				if err != nil {
 					logger.Error(err, "Failed to update UpgradeAccelerator status for nodesSelected")
@@ -213,73 +214,16 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 			}
 
 			// ==========================================================================================
-			// Get the Release Images
+			// Setup Resources
 			// ==========================================================================================
-			releaseImages, err := GetReleaseImages(clusterVersionState.DesiredImage)
+			operatorNamespace, err := r.setupResources(ctx, upgradeAccelerator, clusterVersionState, &logger)
 			if err != nil {
-				logger.Error(err, "Failed to get Release Images")
-				_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_GET_RELEASE_IMAGES, err.Error())
-				_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_RUNNING, CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
-				return ctrl.Result{RequeueAfter: time.Second * 30}, err
-			}
-			// logger.V(1).Info("Release Images ("+fmt.Sprintf("%d", len(releaseImages))+"): ", "images", releaseImages)
-
-			// ==========================================================================================
-			// Filter the target release images
-			// ==========================================================================================
-			filteredReleaseImages := FilterReleaseImages(releaseImages, clusterInfrastructureType)
-			// logger.V(1).Info("Filtered Release Images ("+fmt.Sprintf("%d", len(filteredReleaseImages))+"): ", "images", filteredReleaseImages)
-
-			// ==========================================================================================
-			// Create the Namespace for the operator workload components
-			// ==========================================================================================
-			operatorNamespace, err := r.createOperatorNamespace(ctx, upgradeAccelerator)
-			if err != nil {
-				logger.Error(err, "Failed to create Operator Namespace")
-				_ = r.setConditionSetupNamespaceFailure(ctx, upgradeAccelerator, err.Error())
+				logger.Error(err, "Failed to setup resources")
 				_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_SETUP, err.Error())
 				_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_RUNNING, CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
 				return ctrl.Result{RequeueAfter: time.Second * 30}, err
 			}
-
-			// ==========================================================================================
-			// Create the Release Image ConfigMap
-			// ==========================================================================================
-			// Convert the releaseImages and filteredReleaseImages into their JSON structures to be passed as a string into the ConfigMap
-			releaseImagesJSON, err := json.Marshal(releaseImages)
-			if err != nil {
-				logger.Error(err, "Failed to marshal releaseImages to JSON")
-				return ctrl.Result{RequeueAfter: time.Second * 30}, err
-			}
-			filteredReleaseImagesJSON, err := json.Marshal(filteredReleaseImages)
-			if err != nil {
-				logger.Error(err, "Failed to marshal filteredReleaseImages to JSON")
-				return ctrl.Result{RequeueAfter: time.Second * 30}, err
-			}
-			err = r.createReleaseConfigMap(ctx, upgradeAccelerator, clusterVersionState.DesiredVersion, string(releaseImagesJSON), string(filteredReleaseImagesJSON))
-			if err != nil {
-				logger.Error(err, "Failed to create Release ConfigMap")
-				_ = r.setConditionSetupConfigMapFailure(ctx, upgradeAccelerator, err.Error())
-				_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_SETUP, err.Error())
-				_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_RUNNING, CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
-				return ctrl.Result{RequeueAfter: time.Second * 30}, err
-			}
-
-			// ==========================================================================================
-			// Create Puller Script ConfigMap
-			// ==========================================================================================
-			err = r.createPullerScriptConfigMap(ctx, upgradeAccelerator)
-			if err != nil {
-				logger.Error(err, "Failed to create Puller Script ConfigMap")
-				_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_SETUP, err.Error())
-				_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_RUNNING, CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
-				_ = r.setConditionSetupConfigMapFailure(ctx, upgradeAccelerator, err.Error())
-				return ctrl.Result{RequeueAfter: time.Second * 30}, err
-			}
-
-			// ==========================================================================================
 			// Conditional Gate: SetupComplete
-			// ==========================================================================================
 			_ = r.setConditionSetupComplete(ctx, upgradeAccelerator)
 			// TODO: Check for the Failure type, clear any previous failures
 
@@ -287,71 +231,7 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 			// Determine Node List States
 			// Tip: Exit as early as possible from determined end states
 			// ==========================================================================================
-			upgradeAcceleratorStatusChanged = false
-
-			// WTF is this code?  I should have slept sooner...
-			// if upgradeAccelerator.Status.LastCompletedVersion != "" {
-			// 	if upgradeAccelerator.Status.LastCompletedVersion == upgradeAccelerator.Status.TargetVersion {
-			// 		upgradeAccelerator.Status.NodesWaiting = nil
-			// 		upgradeAccelerator.Status.NodesWarming = nil
-			// 		upgradeAccelerator.Status.NodesPreheated = nil
-			// 		upgradeAccelerator.Status.PrimerNodes = nil
-			// 	}
-			// }
-
-			// 	// If the lastCompletedVersion not is equal to the targetVersion then clear out the nodeLists
-			// 	if upgradeAccelerator.Status.LastCompletedVersion != upgradeAccelerator.Status.TargetVersion {
-			// 		if upgradeAccelerator.Status.NodesWaiting != nil {
-			// 			upgradeAcceleratorStatusChanged = true
-			// 			upgradeAccelerator.Status.NodesWaiting = nil
-			// 		}
-			// 		if upgradeAccelerator.Status.NodesWarming != nil {
-			// 			upgradeAcceleratorStatusChanged = true
-			// 			upgradeAccelerator.Status.NodesWarming = nil
-			// 		}
-			// 		if upgradeAccelerator.Status.NodesPreheated != nil {
-			// 			upgradeAcceleratorStatusChanged = true
-			// 			upgradeAccelerator.Status.NodesPreheated = nil
-			// 		}
-			// 		if upgradeAccelerator.Status.PrimerNodes != nil {
-			// 			upgradeAcceleratorStatusChanged = true
-			// 			upgradeAccelerator.Status.PrimerNodes = nil
-			// 		}
-			// 		logger.Info("New target version detected, resetting node status lists", "lastCompletedVersion", upgradeAccelerator.Status.LastCompletedVersion, "targetVersion", upgradeAccelerator.Status.TargetVersion)
-			// 	} else {
-			// 		// If the lastCompletedVersion is equal to the targetVersion then clear out the nodeLists and finish reconciliation
-			// 		if upgradeAccelerator.Status.NodesWaiting != nil {
-			// 			upgradeAcceleratorStatusChanged = true
-			// 			upgradeAccelerator.Status.NodesWaiting = nil
-			// 		}
-			// 		if upgradeAccelerator.Status.NodesWarming != nil {
-			// 			upgradeAcceleratorStatusChanged = true
-			// 			upgradeAccelerator.Status.NodesWarming = nil
-			// 		}
-			// 		if upgradeAccelerator.Status.NodesPreheated != nil {
-			// 			upgradeAcceleratorStatusChanged = true
-			// 			upgradeAccelerator.Status.NodesPreheated = nil
-			// 		}
-			// 		if upgradeAccelerator.Status.PrimerNodes != nil {
-			// 			upgradeAcceleratorStatusChanged = true
-			// 			upgradeAccelerator.Status.PrimerNodes = nil
-			// 		}
-			// 		logger.Info("No new target version detected, all nodes preheated for target version", "lastCompletedVersion", upgradeAccelerator.Status.LastCompletedVersion, "targetVersion", upgradeAccelerator.Status.TargetVersion)
-
-			// 		if upgradeAcceleratorStatusChanged {
-			// 			err = r.Status().Update(ctx, upgradeAccelerator)
-			// 			if err != nil {
-			// 				logger.Error(err, "Failed to update UpgradeAccelerator status")
-			// 				return ctrl.Result{RequeueAfter: time.Second * 30}, err
-			// 			}
-			// 			// Refetch the UpgradeAccelerator
-			// 			if err := r.Get(ctx, req.NamespacedName, upgradeAccelerator); err != nil {
-			// 				logger.Error(err, "Failed to re-fetch UpgradeAccelerator")
-			// 				return ctrl.Result{RequeueAfter: time.Second * 30}, err
-			// 			}
-			// 		}
-			// 	}
-			// }
+			upgradeAcceleratorStatusChanged := false
 
 			if upgradeAcceleratorStatusChanged {
 				err = r.Status().Update(ctx, upgradeAccelerator)
@@ -365,42 +245,6 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 					return ctrl.Result{RequeueAfter: time.Second * 30}, err
 				}
 			} else {
-
-				// ==========================================================================================
-				// Determine priming function
-				// ==========================================================================================
-				primerNodes := []string{}
-				if upgradeAccelerator.Spec.Prime {
-					// Check if there are manually set primer nodes
-					nodeList := &corev1.NodeList{}
-					if err := r.List(ctx, nodeList, client.MatchingLabels(map[string]string{"openshift.kemo.dev/primer-node": "true"})); err != nil {
-						_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_GET_NODES, err.Error())
-						_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS})
-						logger.Error(err, "Failed to list nodes", "selector", upgradeAccelerator.Spec.Selector.NodeSelector)
-						return ctrl.Result{RequeueAfter: time.Second * 30}, err
-					} else {
-						// Labeled Nodes are listed - add manually set primer nodes
-						for _, node := range nodeList.Items {
-							primerNodes = append(primerNodes, node.Name)
-						}
-					}
-					// If no manually set primer nodes, then just pick one from the targeted nodes if it's not part of the primingProhibitedNodes list or already in the primerNodes list
-					for _, tNode := range targetedNodes {
-						if !slices.Contains(primingProhibitedNodes, tNode) && !slices.Contains(primerNodes, tNode) {
-							primerNodes = append(primerNodes, tNode)
-						}
-					}
-					upgradeAccelerator.Status.PrimerNodes = primerNodes
-					err = r.Status().Update(ctx, upgradeAccelerator)
-					if err != nil {
-						logger.Error(err, "Failed to update UpgradeAccelerator status")
-						return ctrl.Result{RequeueAfter: time.Second * 30}, err
-					}
-					logger.Info("Primer Nodes", "nodes", primerNodes)
-				} else {
-					_ = r.setConditionPrimerSkipped(ctx, upgradeAccelerator, "Priming effectively disabled")
-					logger.Info("Priming effectively disabled")
-				}
 
 				nodesWaiting := upgradeAccelerator.Status.NodesWaiting
 
@@ -436,12 +280,9 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 						// Make sure the node isn't already preheated
 						if !slices.Contains(upgradeAccelerator.Status.NodesWarming, pNode) || !slices.Contains(upgradeAccelerator.Status.NodesPreheated, pNode) {
 							err = r.createPullJob(ctx, upgradeAccelerator, PullJob{
-								Name:           fmt.Sprintf("%s-ua-puller-%s", pNode, hashString(upgradeAccelerator.Name)),
+								Name:           fmt.Sprintf("%s-ua-puller-%s", pNode, hashString(upgradeAccelerator.Status.DesiredVersion)),
 								Namespace:      operatorNamespace,
-								ContainerImage: jobPullerImage,
-								ConfigMapName:  fmt.Sprintf("release-%s", clusterVersionState.DesiredVersion),
 								TargetNodeName: pNode,
-								ReleaseVersion: clusterVersionState.DesiredVersion,
 							})
 							if err != nil {
 								logger.Error(err, "Failed to create Pod Puller Job")
@@ -495,12 +336,9 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 						// Make sure the node isn't already preheated
 						if !slices.Contains(upgradeAccelerator.Status.NodesWarming, pNode) || !slices.Contains(upgradeAccelerator.Status.NodesPreheated, pNode) {
 							err = r.createPullJob(ctx, upgradeAccelerator, PullJob{
-								Name:           fmt.Sprintf("%s-ua-puller-%s", pNode, hashString(upgradeAccelerator.Name)),
+								Name:           fmt.Sprintf("%s-ua-puller-%s", pNode, hashString(upgradeAccelerator.Status.DesiredVersion)),
 								Namespace:      operatorNamespace,
-								ContainerImage: jobPullerImage,
-								ConfigMapName:  fmt.Sprintf("release-%s", clusterVersionState.DesiredVersion),
 								TargetNodeName: pNode,
-								ReleaseVersion: clusterVersionState.DesiredVersion,
 							})
 							if err != nil {
 								logger.Error(err, "Failed to create Pod Puller Job")
@@ -597,89 +435,4 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	globalLog.Info("Upgrade Accelerator reconciliation completed")
 	return ctrl.Result{RequeueAfter: time.Minute * 1}, nil
-}
-
-// SetupWithManager sets up the controller with the Manager.
-func (r *UpgradeAcceleratorReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&openshiftv1alpha1.UpgradeAccelerator{}).
-		Owns(&corev1.ConfigMap{}).
-		Owns(&batchv1.Job{}).
-		// Watch for updates to the ClusterVersion and run a reconciliation for all UpgradeAccelerators
-		Watches(&configv1.ClusterVersion{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				upgradeAcceleratorList := &openshiftv1alpha1.UpgradeAcceleratorList{}
-				client := mgr.GetClient()
-
-				err := client.List(context.TODO(), upgradeAcceleratorList)
-				if err != nil {
-					return []reconcile.Request{}
-				}
-				var reconcileRequests []reconcile.Request
-				if _, ok := obj.(*configv1.ClusterVersion); ok {
-					// Reconcile all UpgradeAccelerators
-					for _, ua := range upgradeAcceleratorList.Items {
-						rec := reconcile.Request{
-							NamespacedName: types.NamespacedName{
-								Name:      ua.Name,
-								Namespace: ua.Namespace,
-							},
-						}
-						reconcileRequests = append(reconcileRequests, rec)
-					}
-				}
-				return reconcileRequests
-			}),
-		).
-		// Watch for updates to the ClusterOperators and run a reconciliation for all UpgradeAccelerators
-		Watches(&configv1.ClusterOperator{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				upgradeAcceleratorList := &openshiftv1alpha1.UpgradeAcceleratorList{}
-				client := mgr.GetClient()
-
-				err := client.List(context.TODO(), upgradeAcceleratorList)
-				if err != nil {
-					return []reconcile.Request{}
-				}
-				var reconcileRequests []reconcile.Request
-				if _, ok := obj.(*configv1.ClusterOperator); ok {
-					// Reconcile all UpgradeAccelerators
-					for _, ua := range upgradeAcceleratorList.Items {
-						rec := reconcile.Request{
-							NamespacedName: types.NamespacedName{
-								Name:      ua.Name,
-								Namespace: ua.Namespace,
-							},
-						}
-						reconcileRequests = append(reconcileRequests, rec)
-					}
-				}
-				return reconcileRequests
-			}),
-		).
-		// Filter watched events to check only some fields on relevant ClusterVersion updates
-		WithEventFilter(predicate.Funcs{
-			UpdateFunc: func(e event.UpdateEvent) bool {
-				if _, ok := e.ObjectNew.(*configv1.ClusterVersion); ok {
-					return hasClusterVersionChanged(
-						e.ObjectOld.(*configv1.ClusterVersion),
-						e.ObjectNew.(*configv1.ClusterVersion))
-				}
-				return true
-			},
-		}).
-		// Filter watched events to check only some fields on relevant machine-config ClusterOperator updates
-		WithEventFilter(predicate.Funcs{
-			UpdateFunc: func(e event.UpdateEvent) bool {
-				if _, ok := e.ObjectNew.(*configv1.ClusterOperator); ok {
-					return hasMachineConfigClusterOperatorChanged(
-						e.ObjectOld.(*configv1.ClusterOperator),
-						e.ObjectNew.(*configv1.ClusterOperator))
-				}
-				return true
-			},
-		}).
-		WithEventFilter(ignoreDeletionPredicate()).
-		Named("upgradeaccelerator").
-		Complete(r)
 }

@@ -15,6 +15,7 @@ const (
 	UpgradeAcceleratorDefaultRandomWaitMin                  = 10
 	UpgradeAcceleratorDefaultRandomWaitMax                  = 30
 	UpgradeAcceleratorMachineConfigOperatorStatusVersionKey = "operator"
+	UpgradeAcceleratorDefaultJobTTL                         = 7200
 )
 
 var (

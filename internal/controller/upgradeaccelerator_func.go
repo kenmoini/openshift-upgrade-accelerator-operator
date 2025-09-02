@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"sort"
+	"strings"
+	"unicode"
 
 	openshiftv1alpha1 "github.com/kenmoini/openshift-upgrade-accelerator-operator/api/v1alpha1"
 	configv1 "github.com/openshift/api/config/v1"
@@ -14,6 +17,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+type slice struct{ sort.StringSlice }
+
+func (s slice) Less(d, e int) bool {
+	t := strings.Map(unicode.ToUpper, s.StringSlice[d])
+	u := strings.Map(unicode.ToUpper, s.StringSlice[e])
+	return t < u
+}
+
+func sortSliceOfStrings(input []string) []string {
+	a := slice{
+		sort.StringSlice(input),
+	}
+	sort.Sort(a)
+	return a.StringSlice
+}
 
 // createOperatorNamespace creates the namespace for the Operator to deploy Jobs into
 func (reconciler *UpgradeAcceleratorReconciler) createOperatorNamespace(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator) (targetNamespace string, err error) {

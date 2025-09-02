@@ -123,7 +123,7 @@ More information can be found via the [Kubebuilder Documentation](https://book.k
 
 ### Disabling Per-Node Preheating
 
-In case you want to cast a wide net but let a few small fish through, you can label nodes with `openshift.kemo.dev/disable-preheat: "true"` and the Operator will exclude that node no matter what other selectors include it.  This will cause the node to only pull release images as it needs when normally scheduled.
+In case you want to cast a wide net but let a few small fish through, you can label nodes with `openshift.kemo.dev/disable-preheat: "true"` and the Operator will **exclude that node no matter what** other selectors include it.  This will cause the node to only pull release images as it needs when normally scheduled.
 
 ### Manually Specifying Primer Nodes
 

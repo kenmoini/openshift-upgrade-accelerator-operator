@@ -62,6 +62,10 @@ type UpgradeAcceleratorConfig struct {
 	// OverrideReleaseVersion allows for specifying a different release version to be pulled.
 	// +optional
 	OverrideReleaseVersion OverrideReleaseVersion `json:"overrideReleaseVersion,omitempty"`
+	// PullScriptConfigMapName is the name of the ConfigMap containing the pull script.
+	// If specified the operator will skip creating its own and use the defined one for Jobs.
+	// +optional
+	PullScriptConfigMapName string `json:"pullScriptConfigMapName,omitempty"`
 }
 
 type OverrideReleaseVersion struct {
@@ -69,6 +73,7 @@ type OverrideReleaseVersion struct {
 	Image   string `json:"image,omitempty"`
 }
 
+// TODO: UpgradeAcceleratorConfigRandomWait
 type UpgradeAcceleratorConfigRandomWait struct {
 	// Enabled indicates whether random wait is enabled.
 	// +kubebuilder:default:=true
@@ -105,12 +110,18 @@ type Selector struct {
 
 // UpgradeAcceleratorStatus defines the observed state of UpgradeAccelerator.
 type UpgradeAcceleratorStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// ClusterInfrastructure indicates the detected infrastructure type of the cluster.
+	ClusterInfrastructure string `json:"clusterInfrastructure,omitempty"`
 	// CurrentVersion indicates the current version of OpenShift.  This is derived from the machine-config ClusterOperator.
 	CurrentVersion string `json:"currentVersion,omitempty"`
 	// TargetVersion indicates the target version of OpenShift that is reported by the ClusterVersion CR.
 	TargetVersion string `json:"targetVersion,omitempty"`
+	// DesiredVersion indicates the desired version of OpenShift that the UpgradeAccelerator is trying to achieve.
+	// This is either inferred from the cluster via the TargetVersion if it does not match the CurrentVersion
+	// Or it is provided as a status for the config override
+	DesiredVersion string `json:"desiredVersion,omitempty"`
+	// DesiredImage is the desired release image for the UpgradeAccelerator.
+	DesiredImage string `json:"desiredImage,omitempty"`
 	// LastCompletedVersion indicates the last completed version of OpenShift releases pulled.
 	LastCompletedVersion string `json:"lastCompletedVersion,omitempty"`
 	// Conditions represents the latest available observations of the UpgradeAccelerator's current state.

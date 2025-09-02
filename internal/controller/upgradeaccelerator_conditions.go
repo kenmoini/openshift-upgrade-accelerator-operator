@@ -161,9 +161,9 @@ func (reconciler *UpgradeAcceleratorReconciler) setConditionNotRunning(ctx conte
 // ==========================================================================================================================
 // Primer
 func (reconciler *UpgradeAcceleratorReconciler) setConditionPrimerCompleted(ctx context.Context,
-	upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, reason string, message string) error {
+	upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, message string) error {
 	return reconciler.appendCondition(ctx, upgradeAccelerator, CONDITION_TYPE_PRIMER, CONDITION_STATUS_TRUE,
-		reason, message)
+		CONDITION_REASON_PRIMER_COMPLETED, message)
 }
 func (reconciler *UpgradeAcceleratorReconciler) setConditionPrimerInProgress(ctx context.Context,
 	upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, message string) error {

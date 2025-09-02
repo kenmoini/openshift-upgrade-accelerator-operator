@@ -59,6 +59,11 @@ spec:
                       version:
                         type: string
                     type: object
+                  pullScriptConfigMapName:
+                    description: |-
+                      PullScriptConfigMapName is the name of the ConfigMap containing the pull script.
+                      If specified the operator will skip creating its own and use the defined one for Jobs.
+                    type: string
                   randomWait:
                     description: RandomWait allows for adding a random wait time before
                       starting the image pulling.
@@ -211,6 +216,10 @@ spec:
           status:
             description: UpgradeAcceleratorStatus defines the observed state of UpgradeAccelerator.
             properties:
+              clusterInfrastructure:
+                description: ClusterInfrastructure indicates the detected infrastructure
+                  type of the cluster.
+                type: string
               conditions:
                 description: Conditions represents the latest available observations
                   of the UpgradeAccelerator's current state.
@@ -270,10 +279,17 @@ spec:
                   type: object
                 type: array
               currentVersion:
+                description: CurrentVersion indicates the current version of OpenShift.  This
+                  is derived from the machine-config ClusterOperator.
+                type: string
+              desiredImage:
+                description: DesiredImage is the desired release image for the UpgradeAccelerator.
+                type: string
+              desiredVersion:
                 description: |-
-                  INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-                  Important: Run "make" to regenerate code after modifying this file
-                  CurrentVersion indicates the current version of OpenShift.  This is derived from the machine-config ClusterOperator.
+                  DesiredVersion indicates the desired version of OpenShift that the UpgradeAccelerator is trying to achieve.
+                  This is either inferred from the cluster via the TargetVersion if it does not match the CurrentVersion
+                  Or it is provided as a status for the config override
                 type: string
               lastCompletedVersion:
                 description: LastCompletedVersion indicates the last completed version

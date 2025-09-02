@@ -17,7 +17,7 @@ import (
 
 // TODO: Add MatchingFieldSelector functionality, dummy
 func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, logger *logr.Logger) (targetedNodes []string,
-	prohibitedNodes []string, primingProhibitedNodes []string, err error) {
+	prohibitedNodes []string, primerNodes []string, primingProhibitedNodes []string, err error) {
 
 	validMachineConfigPoolSelectors := make(map[string]*metav1.LabelSelector)
 	listOpts := []client.ListOption{}
@@ -30,8 +30,8 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 	if err := r.List(ctx, nodes, listOpts...); err != nil {
 		logger.Error(err, "determineTargetedNodes: Failed to list nodes")
 		_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_GET_NODES, err.Error())
-		_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
-		return nil, nil, nil, err
+		_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_RUNNING, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
+		return nil, nil, nil, nil, err
 	} else {
 		logger.Info("determineTargetedNodes: Successfully listed " + strconv.Itoa(len(nodes.Items)) + " nodes")
 	}
@@ -39,18 +39,27 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 	// ===============================================================================================================
 	// Preliminary Node Filter Checks
 	for _, node := range nodes.Items {
+		// Filtering - Determine if the node has preheating disabled
+		// If this node has preheating explicitly disabled, add it to the prohibitedNodes list
+		// This disables the node from being preheated no matter what other selectors are applied
+		preheatingProhibited := false
+		preheatingLabelValue, ok := node.Labels["openshift.kemo.dev/disable-preheat"]
+		if ok && strings.ToLower(preheatingLabelValue) == "true" {
+			logger.Info("determineTargetedNodes: Manually set as prohibited node " + node.Name)
+			prohibitedNodes = append(prohibitedNodes, node.Name)
+			preheatingProhibited = true
+		}
 		// Filtering - Determine if the node has priming disabled
 		// If this node has priming explicitly disabled, add it to the primingProhibitedNodes
 		primingLabelValue, ok := node.Labels["openshift.kemo.dev/primer-node"]
 		if ok && strings.ToLower(primingLabelValue) == "false" {
+			logger.Info("determineTargetedNodes: Manually set as priming prohibited node " + node.Name)
 			primingProhibitedNodes = append(primingProhibitedNodes, node.Name)
-		}
-		// Filtering - Determine if the node has preheating disabled
-		// If this node has preheating explicitly disabled, add it to the prohibitedNodes list
-		// This disables the node from being preheated no matter what other selectors are applied
-		preheatingLabelValue, ok := node.Labels["openshift.kemo.dev/disable-preheat"]
-		if ok && strings.ToLower(preheatingLabelValue) == "true" {
-			prohibitedNodes = append(prohibitedNodes, node.Name)
+		} else {
+			if !preheatingProhibited {
+				logger.Info("determineTargetedNodes: Manually set as primer node " + node.Name)
+				primerNodes = append(primerNodes, node.Name)
+			}
 		}
 	}
 
@@ -65,7 +74,6 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 				targetedNodes = append(targetedNodes, node.Name)
 			}
 		}
-		return targetedNodes, prohibitedNodes, primingProhibitedNodes, nil
 	}
 
 	// ===============================================================================================================
@@ -78,7 +86,7 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 			logger.Error(err, "determineTargetedNodes: Failed to list MachineConfigPools")
 			_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_GET_MACHINECONFIGPOOLS, err.Error())
 			_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		} else {
 			logger.Info("determineTargetedNodes: Successfully listed " + strconv.Itoa(len(machineConfigPools.Items)) + " MachineConfigPools")
 		}
@@ -119,7 +127,7 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 					_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_SETUP, err.Error())
 					_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
 					logger.Error(err, "determineTargetedNodes: Failed to merge NodeSelector into MachineConfigPoolSelector", "pool", pool)
-					return nil, nil, nil, err
+					return nil, nil, nil, nil, err
 				}
 				logger.Info("determineTargetedNodes: Merged NodeSelector into MachineConfigPoolSelectors", pool, selector)
 				// }
@@ -132,7 +140,7 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 					logger.Error(err, "determineTargetedNodes: Failed to list nodes by MachineConfigPoolSelector for pool "+pool, "selector", selector)
 					_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_GET_NODES, err.Error())
 					_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
-					return nil, nil, nil, err
+					return nil, nil, nil, nil, err
 				}
 				// Check the length
 				if len(mcpSelectedNodesList.Items) == 0 {
@@ -155,7 +163,7 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 				logger.Error(err, "determineTargetedNodes: Failed to list nodes by nodeSelector", "selector", upgradeAccelerator.Spec.Selector.NodeSelector)
 				_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_GET_NODES, err.Error())
 				_ = r.deleteConditions(ctx, upgradeAccelerator, []string{CONDITION_TYPE_SUCCESSFUL, CONDITION_TYPE_PRIMER, CONDITION_TYPE_PRIMING_IN_PROGRESS, CONDITION_TYPE_SETUP_COMPLETE})
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
 			} else {
 				// Loop through each node and add it to the list
 				for _, node := range nodeSelectorList.Items {
@@ -168,12 +176,68 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 						targetedNodes = append(targetedNodes, node.Name)
 					}
 				}
-				// Exit early
-				return targetedNodes, prohibitedNodes, primingProhibitedNodes, nil
 			}
 		}
 	}
 
+	// Sort the list of targetNodes
+	if len(targetedNodes) > 1 {
+		targetedNodes = sortSliceOfStrings(targetedNodes)
+	}
+
+	// Check if priming is even enabled
+	if upgradeAccelerator.Spec.Prime {
+		// Priming is set as a functional state
+		// It toggles the priming functionality entirely, even if nodes are manually specified to be primed
+		logger.Info("determineTargetedNodes: Priming is enabled")
+		// Check if there are currently defined primerNodes and any targetedNodes
+		if len(targetedNodes) > 0 {
+			if len(primerNodes) == 0 {
+				// If not we should loop through the list of sorted targetedNodes
+				// and pick the first one alphabetically if it's not part of the primingProhibitedNodes list
+				for _, nodeName := range targetedNodes {
+					if !slices.Contains(primingProhibitedNodes, nodeName) {
+						primerNodes = append(primerNodes, nodeName)
+						break
+					}
+				}
+			} else { // primerNodes > 0
+				// Make sure the manually defined primerNodes are in the targetedNodes list, and if not add it
+				// Discount double check!
+				for _, prmrNode := range primerNodes {
+					if !slices.Contains(targetedNodes, prmrNode) {
+						targetedNodes = append(targetedNodes, prmrNode)
+					}
+				}
+			}
+		} else { // targetedNodes == 0
+			// If there are no targetedNodes, then check if there are manually defined primerNodes
+			// If so, those are the new targetedNodes
+			if len(primerNodes) > 0 {
+				if len(primerNodes) > 1 {
+					targetedNodes = sortSliceOfStrings(primerNodes)
+				} else {
+					targetedNodes = primerNodes
+				}
+			} // else: no nodes at all!
+		}
+	} else {
+		// Priming is disabled - Empty primerNodes
+		primerNodes = []string{}
+	}
+
+	// This function should return a configured state idempotent list of nodes
+	// Sort the prohibitedNodes, primerNodes, and primingProhibitedNodes if they're not empty
+	if len(prohibitedNodes) > 1 {
+		prohibitedNodes = sortSliceOfStrings(prohibitedNodes)
+	}
+	if len(primerNodes) > 1 {
+		primerNodes = sortSliceOfStrings(primerNodes)
+	}
+	if len(primingProhibitedNodes) > 1 {
+		primingProhibitedNodes = sortSliceOfStrings(primingProhibitedNodes)
+	}
+
 	// Size determination and status checks are completed external to this function on the consuming end
-	return targetedNodes, prohibitedNodes, primingProhibitedNodes, nil
+	return targetedNodes, prohibitedNodes, primerNodes, primingProhibitedNodes, nil
 }
