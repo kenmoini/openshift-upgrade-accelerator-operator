@@ -16,6 +16,7 @@ const (
 
 	CONDITION_TYPE_FAILURE              = "Failure"
 	CONDITION_TYPE_SUCCESSFUL           = "Successful"
+	CONDITION_TYPE_COMPLETED            = "Completed"
 	CONDITION_TYPE_RUNNING              = "Running"
 	CONDITION_TYPE_PRIMER               = "Primer"
 	CONDITION_TYPE_PRIMING_IN_PROGRESS  = "PrimingInProgress"
@@ -46,6 +47,8 @@ const (
 	CONDITION_REASON_SETUP_CONFIGMAP_FAILURE = "ConfigMapFailure"
 
 	CONDITION_MESSAGE_INFRASTRUCTURE_FOUND = "Platform Type: %s"
+
+	CONDITION_MESSAGE_COMPLETED = "All targeted nodes have completed"
 )
 
 // appendCondition appends a condition to the UpgradeAccelerator status.
@@ -130,6 +133,8 @@ func (reconciler *UpgradeAcceleratorReconciler) setConditionFailure(ctx context.
 		reason, errorMessage)
 }
 
+// ==========================================================================================================================
+// Infrastructure
 func (reconciler *UpgradeAcceleratorReconciler) setConditionInfrastructureFound(ctx context.Context,
 	upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, infrastructureType string) error {
 	return reconciler.appendCondition(ctx, upgradeAccelerator, CONDITION_TYPE_INFRASTRUCTURE_FOUND, CONDITION_STATUS_TRUE,
@@ -140,6 +145,15 @@ func (reconciler *UpgradeAcceleratorReconciler) setConditionInfrastructureNotFou
 	upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, inErr error) error {
 	return reconciler.appendCondition(ctx, upgradeAccelerator, CONDITION_TYPE_INFRASTRUCTURE_FOUND, CONDITION_STATUS_FALSE,
 		CONDITION_REASON_INFRASTRUCTURE_NOT_FOUND, inErr.Error())
+}
+
+// ==========================================================================================================================
+// Completed
+func (reconciler *UpgradeAcceleratorReconciler) setConditionCompleted(ctx context.Context,
+	upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, message string) error {
+
+	return reconciler.appendCondition(ctx, upgradeAccelerator, CONDITION_TYPE_COMPLETED, CONDITION_STATUS_TRUE,
+		CONDITION_REASON_RUNNING_RECONCILIATION_COMPLETED, message)
 }
 
 // ==========================================================================================================================

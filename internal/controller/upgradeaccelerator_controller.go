@@ -156,10 +156,10 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 				logger.Error(err, "Failed to determine targeted nodes")
 				return ctrl.Result{RequeueAfter: time.Second * 30}, err
 			}
-			logger.Info("List of final targetedNodes", "targetedNodes", targetedNodes)
-			logger.Info("List of final primerNodes", "primerNodes", primerNodes)
-			logger.Info("List of final prohibitedNodes", "prohibitedNodes", prohibitedNodes)
-			logger.Info("List of final primingProhibitedNodes", "primingProhibitedNodes", primingProhibitedNodes)
+			logger.V(1).Info("List of final targetedNodes", "targetedNodes", targetedNodes)
+			logger.V(1).Info("List of final primerNodes", "primerNodes", primerNodes)
+			logger.V(1).Info("List of final prohibitedNodes", "prohibitedNodes", prohibitedNodes)
+			logger.V(1).Info("List of final primingProhibitedNodes", "primingProhibitedNodes", primingProhibitedNodes)
 
 			// ==========================================================================================
 			// Initial State Checks
@@ -199,6 +199,19 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 					if !stillWaitingOnPrimerNodes {
 						_ = r.setConditionPrimerCompleted(ctx, upgradeAccelerator, "All primer nodes are preheated")
 					}
+				}
+
+				// Completion checks
+				// Compare the targetNodes and the completed nodes, check if there are no waiting nodes
+				// If they are the same, then exit early
+				// If the lists are different, then reset the completed condition
+				// TODO: BUG - Technically the number of nodes selected and the nodes completed could be the same - with different contents
+				// Come back and fix this, deep copy reflection thing?
+				if len(upgradeAccelerator.Status.NodesSelected) == len(upgradeAccelerator.Status.NodesPreheated) && len(upgradeAccelerator.Status.NodesWaiting) == 0 {
+					logger.Info(CONDITION_MESSAGE_COMPLETED)
+					_ = r.setConditionNotRunning(ctx, upgradeAccelerator, CONDITION_REASON_RUNNING_RECONCILIATION_COMPLETED, CONDITION_MESSAGE_COMPLETED)
+					_ = r.setConditionCompleted(ctx, upgradeAccelerator, CONDITION_MESSAGE_COMPLETED)
+					return ctrl.Result{RequeueAfter: time.Minute * 1}, nil
 				}
 
 				err = r.Status().Update(ctx, upgradeAccelerator)
@@ -433,7 +446,7 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 					if len(upgradeAccelerator.Status.NodesPreheated) == len(upgradeAccelerator.Status.NodesSelected) {
 						// All nodes have been preheated successfully
 						logger.Info("All nodes have been preheated successfully")
-						err = r.setConditionNotRunning(ctx, upgradeAccelerator, CONDITION_REASON_RUNNING_RECONCILIATION_COMPLETED, "All nodes preheated")
+						err = r.setConditionNotRunning(ctx, upgradeAccelerator, CONDITION_REASON_RUNNING_RECONCILIATION_COMPLETED, CONDITION_MESSAGE_COMPLETED)
 						if err != nil {
 							logger.Error(err, "Failed to set UpgradeAccelerator condition")
 							return ctrl.Result{RequeueAfter: time.Second * 30}, err
