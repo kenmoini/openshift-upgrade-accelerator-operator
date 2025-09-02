@@ -275,11 +275,16 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 				// ==========================================================================================
 				if upgradeAccelerator.Spec.Prime && len(primerNodes) > 0 {
 					// Loop through each node and schedule a Pod
+					primerJobScheduled := false
+					primerJobStillRunning := false
 					for _, pNode := range primerNodes {
-						// Make sure the node isn't already warming
+						// Make sure the node isn't already warming (running)
+						if slices.Contains(upgradeAccelerator.Status.NodesWarming, pNode) {
+							primerJobStillRunning = true
+						}
 						// Make sure the node isn't already preheated
 						if !slices.Contains(upgradeAccelerator.Status.NodesWarming, pNode) || !slices.Contains(upgradeAccelerator.Status.NodesPreheated, pNode) {
-							err = r.createPullJob(ctx, upgradeAccelerator, PullJob{
+							createdJob, err := r.createPullJob(ctx, upgradeAccelerator, PullJob{
 								Name:           fmt.Sprintf("%s-ua-puller-%s", pNode, hashString(upgradeAccelerator.Status.DesiredVersion)),
 								Namespace:      operatorNamespace,
 								TargetNodeName: pNode,
@@ -289,24 +294,34 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 								return ctrl.Result{RequeueAfter: time.Second * 30}, err
 							} else {
 								// Pod has been scheduled successfully
-								upgradeAccelerator.Status.NodesWarming = append(upgradeAccelerator.Status.NodesWarming, pNode)
-								// Remove the node from the NodesWaiting list
-								// If upgradeAccelerator.Status.NodesWaiting is only one element, we can reset it
-								if len(upgradeAccelerator.Status.NodesWaiting) == 1 {
-									upgradeAccelerator.Status.NodesWaiting = []string{}
-								} else if len(upgradeAccelerator.Status.NodesWaiting) > 1 {
-									upgradeAccelerator.Status.NodesWaiting = append(upgradeAccelerator.Status.NodesWaiting[:slices.Index(upgradeAccelerator.Status.NodesWaiting, pNode)], upgradeAccelerator.Status.NodesWaiting[slices.Index(upgradeAccelerator.Status.NodesWaiting, pNode)+1:]...)
-								}
-								err = r.Status().Update(ctx, upgradeAccelerator)
-								if err != nil {
-									logger.Error(err, "Failed to update UpgradeAccelerator status")
-									return ctrl.Result{RequeueAfter: time.Second * 30}, err
+								if createdJob {
+									primerJobScheduled = true
+									upgradeAccelerator.Status.NodesWarming = append(upgradeAccelerator.Status.NodesWarming, pNode)
+									// Remove the node from the NodesWaiting list
+									// If upgradeAccelerator.Status.NodesWaiting is only one element, we can reset it
+									if len(upgradeAccelerator.Status.NodesWaiting) == 1 && slices.Contains(upgradeAccelerator.Status.NodesWaiting, pNode) {
+										upgradeAccelerator.Status.NodesWaiting = []string{}
+									} else if len(upgradeAccelerator.Status.NodesWaiting) > 1 {
+										upgradeAccelerator.Status.NodesWaiting = append(upgradeAccelerator.Status.NodesWaiting[:slices.Index(upgradeAccelerator.Status.NodesWaiting, pNode)], upgradeAccelerator.Status.NodesWaiting[slices.Index(upgradeAccelerator.Status.NodesWaiting, pNode)+1:]...)
+									}
+									err = r.Status().Update(ctx, upgradeAccelerator)
+									if err != nil {
+										logger.Error(err, "Failed to update UpgradeAccelerator status")
+										return ctrl.Result{RequeueAfter: time.Second * 30}, err
+									}
 								}
 							}
 						}
 					}
-					_ = r.setConditionPrimerInProgress(ctx, upgradeAccelerator, "Primer nodes warming in progress: "+strings.Join(primerNodes, ", "))
-					_ = r.setConditionRunning(ctx, upgradeAccelerator, CONDITION_REASON_RUNNING_JOBS_SCHEDULED, "Following primer nodes currently warming: "+strings.Join(primerNodes, ", "))
+					if primerJobScheduled {
+						_ = r.setConditionPrimerInProgress(ctx, upgradeAccelerator, "Primer nodes warming in progress: "+strings.Join(primerNodes, ", "))
+					}
+					if primerJobStillRunning {
+						_ = r.setConditionRunning(ctx, upgradeAccelerator, CONDITION_REASON_RUNNING_JOBS_SCHEDULED, "Following primer nodes currently warming: "+strings.Join(primerNodes, ", "))
+					}
+					if !primerJobStillRunning && !primerJobScheduled {
+						_ = r.setConditionPrimerCompleted(ctx, upgradeAccelerator, "Primer nodes warming completed: "+strings.Join(primerNodes, ", "))
+					}
 				}
 
 				// ==========================================================================================
@@ -335,7 +350,7 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 						// Make sure the node isn't already warming
 						// Make sure the node isn't already preheated
 						if !slices.Contains(upgradeAccelerator.Status.NodesWarming, pNode) || !slices.Contains(upgradeAccelerator.Status.NodesPreheated, pNode) {
-							err = r.createPullJob(ctx, upgradeAccelerator, PullJob{
+							createdJob, err := r.createPullJob(ctx, upgradeAccelerator, PullJob{
 								Name:           fmt.Sprintf("%s-ua-puller-%s", pNode, hashString(upgradeAccelerator.Status.DesiredVersion)),
 								Namespace:      operatorNamespace,
 								TargetNodeName: pNode,
@@ -344,14 +359,16 @@ func (r *UpgradeAcceleratorReconciler) Reconcile(ctx context.Context, req ctrl.R
 								logger.Error(err, "Failed to create Pod Puller Job")
 								return ctrl.Result{RequeueAfter: time.Second * 30}, err
 							} else {
-								// Pod has been scheduled successfully
-								upgradeAccelerator.Status.NodesWarming = append(upgradeAccelerator.Status.NodesWarming, pNode)
-								// Remove the node from the NodesWaiting list
-								upgradeAccelerator.Status.NodesWaiting = append(upgradeAccelerator.Status.NodesWaiting[:slices.Index(upgradeAccelerator.Status.NodesWaiting, pNode)], upgradeAccelerator.Status.NodesWaiting[slices.Index(upgradeAccelerator.Status.NodesWaiting, pNode)+1:]...)
-								err = r.Status().Update(ctx, upgradeAccelerator)
-								if err != nil {
-									logger.Error(err, "Failed to update UpgradeAccelerator status")
-									return ctrl.Result{RequeueAfter: time.Second * 30}, err
+								if createdJob {
+									// Pod has been scheduled successfully
+									upgradeAccelerator.Status.NodesWarming = append(upgradeAccelerator.Status.NodesWarming, pNode)
+									// Remove the node from the NodesWaiting list
+									upgradeAccelerator.Status.NodesWaiting = append(upgradeAccelerator.Status.NodesWaiting[:slices.Index(upgradeAccelerator.Status.NodesWaiting, pNode)], upgradeAccelerator.Status.NodesWaiting[slices.Index(upgradeAccelerator.Status.NodesWaiting, pNode)+1:]...)
+									err = r.Status().Update(ctx, upgradeAccelerator)
+									if err != nil {
+										logger.Error(err, "Failed to update UpgradeAccelerator status")
+										return ctrl.Result{RequeueAfter: time.Second * 30}, err
+									}
 								}
 							}
 						}

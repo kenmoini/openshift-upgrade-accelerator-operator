@@ -15,6 +15,68 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// determineValidMachineConfigPools checks the list of supplied MCPs against what's actually in the cluster
+func (r *UpgradeAcceleratorReconciler) determineValidMachineConfigPools(definedMachineConfigPools []string,
+	machineConfigPools machineconfigv1.MachineConfigPoolList, logger *logr.Logger) (validMachineConfigPoolSelectors map[string]*metav1.LabelSelector) {
+
+	// Initialize the map if it's nil
+	if validMachineConfigPoolSelectors == nil {
+		validMachineConfigPoolSelectors = make(map[string]*metav1.LabelSelector)
+	}
+	// Extract the names from the machineConfigPools and set as a list of strings
+	for _, pool := range machineConfigPools.Items {
+		// Query the MCP Names from the cluster
+		// If they're in the defined list then it is considered valid
+		if slices.Contains(definedMachineConfigPools, pool.Name) {
+			// An MCP could potentially have no nodeSelectors
+			// If so, skip
+			if pool.Spec.NodeSelector != nil {
+				validMachineConfigPoolSelectors[pool.Name] = pool.Spec.NodeSelector
+			} else {
+				logger.Info("determineValidMachineConfigPools: MachineConfigPool has no valid selectors, skipping", "pool", pool.Name)
+			}
+		}
+	}
+
+	// Check the length of the validMachineConfigPoolSelectors
+	// If it is zero then none of the specified MCPs were found
+	if len(validMachineConfigPoolSelectors) == 0 {
+		logger.Info("determineValidMachineConfigPools: No valid MachineConfigPools found")
+	}
+
+	return validMachineConfigPoolSelectors
+}
+
+// determineLabeledNodes passes an initial list of nodes based on their labels
+// This is used to disable node functionality, specify priming status, etc
+func (r *UpgradeAcceleratorReconciler) determineLabeledNodes(nodes corev1.NodeList, logger *logr.Logger) (prohibitedNodes []string, primerNodes []string, primingProhibitedNodes []string) {
+	for _, node := range nodes.Items {
+		// Filtering - Determine if the node has preheating disabled
+		// If this node has preheating explicitly disabled, add it to the prohibitedNodes list
+		// This disables the node from being preheated no matter what other selectors are applied
+		preheatingProhibited := false
+		preheatingLabelValue, ok := node.Labels["openshift.kemo.dev/disable-preheat"]
+		if ok && strings.ToLower(preheatingLabelValue) == "true" {
+			logger.V(1).Info("determineLabeledNodes: Manually set as prohibited node " + node.Name)
+			prohibitedNodes = append(prohibitedNodes, node.Name)
+			preheatingProhibited = true
+		}
+		// Filtering - Determine if the node has priming disabled
+		// If this node has priming explicitly disabled, add it to the primingProhibitedNodes
+		primingLabelValue, ok := node.Labels["openshift.kemo.dev/primer-node"]
+		if ok && strings.ToLower(primingLabelValue) == "false" {
+			logger.V(1).Info("determineLabeledNodes: Manually set as priming prohibited node " + node.Name)
+			primingProhibitedNodes = append(primingProhibitedNodes, node.Name)
+		} else {
+			if !preheatingProhibited {
+				logger.V(1).Info("determineLabeledNodes: Manually set as primer node " + node.Name)
+				primerNodes = append(primerNodes, node.Name)
+			}
+		}
+	}
+	return prohibitedNodes, primerNodes, primingProhibitedNodes
+}
+
 // TODO: Add MatchingFieldSelector functionality, dummy
 func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, logger *logr.Logger) (targetedNodes []string,
 	prohibitedNodes []string, primerNodes []string, primingProhibitedNodes []string, err error) {
@@ -38,30 +100,7 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 
 	// ===============================================================================================================
 	// Preliminary Node Filter Checks
-	for _, node := range nodes.Items {
-		// Filtering - Determine if the node has preheating disabled
-		// If this node has preheating explicitly disabled, add it to the prohibitedNodes list
-		// This disables the node from being preheated no matter what other selectors are applied
-		preheatingProhibited := false
-		preheatingLabelValue, ok := node.Labels["openshift.kemo.dev/disable-preheat"]
-		if ok && strings.ToLower(preheatingLabelValue) == "true" {
-			logger.Info("determineTargetedNodes: Manually set as prohibited node " + node.Name)
-			prohibitedNodes = append(prohibitedNodes, node.Name)
-			preheatingProhibited = true
-		}
-		// Filtering - Determine if the node has priming disabled
-		// If this node has priming explicitly disabled, add it to the primingProhibitedNodes
-		primingLabelValue, ok := node.Labels["openshift.kemo.dev/primer-node"]
-		if ok && strings.ToLower(primingLabelValue) == "false" {
-			logger.Info("determineTargetedNodes: Manually set as priming prohibited node " + node.Name)
-			primingProhibitedNodes = append(primingProhibitedNodes, node.Name)
-		} else {
-			if !preheatingProhibited {
-				logger.Info("determineTargetedNodes: Manually set as primer node " + node.Name)
-				primerNodes = append(primerNodes, node.Name)
-			}
-		}
-	}
+	prohibitedNodes, primerNodes, primingProhibitedNodes = r.determineLabeledNodes(*nodes, logger)
 
 	// ===============================================================================================================
 	// Default Configuration - All Nodes Targeted
@@ -81,7 +120,6 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 	if len(upgradeAccelerator.Spec.Selector.MachineConfigPools) > 0 {
 		logger.Info("determineTargetedNodes: MachineConfigPools selector definition found in UpgradeAccelerator", "definedPools", upgradeAccelerator.Spec.Selector.MachineConfigPools)
 
-		// Get all the MachineConfigPools
 		if err := r.List(ctx, machineConfigPools, listOpts...); err != nil {
 			logger.Error(err, "determineTargetedNodes: Failed to list MachineConfigPools")
 			_ = r.setConditionFailure(ctx, upgradeAccelerator, CONDITION_REASON_FAILURE_GET_MACHINECONFIGPOOLS, err.Error())
@@ -90,23 +128,7 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 		} else {
 			logger.Info("determineTargetedNodes: Successfully listed " + strconv.Itoa(len(machineConfigPools.Items)) + " MachineConfigPools")
 		}
-
-		// Extract the names from the machineConfigPools and set as a list of strings
-		for _, pool := range machineConfigPools.Items {
-			if slices.Contains(upgradeAccelerator.Spec.Selector.MachineConfigPools, pool.Name) {
-				if pool.Spec.NodeSelector != nil {
-					validMachineConfigPoolSelectors[pool.Name] = pool.Spec.NodeSelector
-				} else {
-					logger.Info("determineTargetedNodes: MachineConfigPool has no valid selectors, skipping", "pool", pool.Name)
-				}
-			}
-		}
-
-		// Check the length of the validMachineConfigPoolSelectors
-		// If it is zero then none of the specified MCPs were found
-		if len(validMachineConfigPoolSelectors) == 0 {
-			logger.Info("determineTargetedNodes: No valid MachineConfigPools found")
-		}
+		validMachineConfigPoolSelectors = r.determineValidMachineConfigPools(upgradeAccelerator.Spec.Selector.MachineConfigPools, *machineConfigPools, logger)
 	}
 
 	// ===============================================================================================================
@@ -173,7 +195,11 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 					if ok && strings.ToLower(excludeLabelValue) == "true" {
 						logger.Info("determineTargetedNodes: Node has openshift.kemo.dev/disable-preheat: \"true\" label, skipping", "node", node.Name)
 					} else {
-						targetedNodes = append(targetedNodes, node.Name)
+						// The node could have been specified as a primer node
+						// Check to make sure it's not already in the targetedNodes list
+						if !slices.Contains(targetedNodes, node.Name) {
+							targetedNodes = append(targetedNodes, node.Name)
+						}
 					}
 				}
 			}

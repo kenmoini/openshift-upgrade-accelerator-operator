@@ -29,7 +29,31 @@ type PullJob struct {
 	ReleaseConfigMapName string `json:"releaseConfigMapName,omitempty"`
 }
 
-func (reconciler *UpgradeAcceleratorReconciler) createPullJob(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, pullJob PullJob) error {
+func (r *UpgradeAcceleratorReconciler) getCompletedJobNodeList(ctx context.Context, upgradeAcceleratorName string,
+	releaseVersion string) (completedNodes []string, err error) {
+	jobList := batchv1.JobList{}
+	labelSelector := client.MatchingLabels{
+		"app":                      UpgradeAcceleratorDefaultAppLabelValue,
+		"upgrade-accelerator/name": upgradeAcceleratorName,
+		"pull-job/release":         releaseVersion,
+	}
+	// Get all the jobs that match the current UpgradeAccelerator, error out else
+	if err := r.List(ctx, &jobList, labelSelector); err != nil {
+		return nil, err
+	}
+
+	// Loop through the jobs
+	// If they're completed then add them to the completedNodes list with the name of the node
+	for _, job := range jobList.Items {
+		if job.Status.Succeeded > 0 {
+			completedNodes = append(completedNodes, job.Spec.Template.Spec.NodeName)
+		}
+	}
+
+	return completedNodes, nil
+}
+
+func (r *UpgradeAcceleratorReconciler) createPullJob(ctx context.Context, upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, pullJob PullJob) (createdJob bool, err error) {
 	// Implementation for creating a pull job
 	// Determine Job Puller Image
 	jobPullerImage := UpgradeAcceleratorDefaultJobPullerImage
@@ -54,7 +78,7 @@ func (reconciler *UpgradeAcceleratorReconciler) createPullJob(ctx context.Contex
 
 	// Define some base labels
 	jobLabels := map[string]string{
-		"app":                      "upgrade-accelerator",
+		"app":                      UpgradeAcceleratorDefaultAppLabelValue,
 		"upgrade-accelerator/name": upgradeAccelerator.Name,
 		"pull-job/release":         upgradeAccelerator.Status.DesiredVersion,
 		"pull-job/name":            pullJob.Name,
@@ -163,16 +187,18 @@ func (reconciler *UpgradeAcceleratorReconciler) createPullJob(ctx context.Contex
 
 	// Check to see if the Job exists already
 	existingJob := &batchv1.Job{}
-	if err := reconciler.Get(ctx, client.ObjectKey{Name: pullJob.Name, Namespace: pullJob.Namespace}, existingJob); err != nil {
+	createdJob = false
+	if err := r.Get(ctx, client.ObjectKey{Name: pullJob.Name, Namespace: pullJob.Namespace}, existingJob); err != nil {
 		if kapierrors.IsNotFound(err) {
 			// Job doesn't exist, create it
-			err = reconciler.Create(ctx, jobConstructor)
+			err = r.Create(ctx, jobConstructor)
 			if err != nil {
-				return err
+				return createdJob, err
 			}
+			createdJob = true
 		} else {
-			return err
+			return createdJob, err
 		}
 	}
-	return nil
+	return createdJob, nil
 }
