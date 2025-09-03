@@ -151,6 +151,7 @@ jobs:
 
   # =========================================================================================================
   # Operator Bundle
+  # =========================================================================================================
   build-bundle:
     name: Build Bundle Container
     runs-on: ubuntu-latest
@@ -193,25 +194,18 @@ jobs:
         with:
           # list of Docker images to use as base name for tags
           images: |
-            ${{ env.REGISTRY_IMAGE }}
+            ${{ env.BUNDLE_REGISTRY_IMAGE }}
 
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v6
         with:
           platforms: ${{ matrix.platform }}
-          tags: ${{ env.REGISTRY_IMAGE }}
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          tags: ${{ env.BUNDLE_REGISTRY_IMAGE }}
           context: ${{ env.BUILD_CONTEXT_PATH }}
-          file: ${{ env.CONTAINERFILE_PATH }}
+          file: ${{ env.BUNDLE_CONTAINERFILE_PATH }}
           labels: ${{ steps.meta.outputs.labels }}
-          #push: true
-          #provenance: false
-          #platforms: linux/amd64, linux/arm64
-          #provenance: mode=max
-          #sbom: true
-          #cache-from: type=gha
-          #cache-to: type=gha,mode=max
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
         run: |
@@ -227,7 +221,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  merge:
+  merge-bundle:
     name: Merge Bundle Digests
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -255,7 +249,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY_IMAGE }}
+          images: ${{ env.BUNDLE_REGISTRY_IMAGE }}
           tags: |
             type=schedule
             type=ref,event=branch
@@ -268,8 +262,8 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
+            $(printf '${{ env.BUNDLE_REGISTRY_IMAGE }}@sha256:%s ' *)
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect ${{ env.BUNDLE_REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
