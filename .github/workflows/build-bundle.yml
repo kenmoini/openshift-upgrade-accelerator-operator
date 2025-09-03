@@ -1,9 +1,9 @@
-name: Operator - Build Operator Container
+name: Bundle - Build Operator Bundle Container
 
 env:
   REGISTRY_HOSTNAME: quay.io
-  REGISTRY_IMAGE: quay.io/kenmoini/openshift-upgrade-accelerator-operator
-  CONTAINERFILE_PATH: Dockerfile
+  REGISTRY_IMAGE: quay.io/kenmoini/openshift-upgrade-accelerator-operator-bundle
+  CONTAINERFILE_PATH: bundle.Dockerfile
   #BUILD_CONTEXT_PATH: .
 
 on:
@@ -18,9 +18,9 @@ on:
       - .github/workflows/**
       - .devcontainer/**
 
-  # Schedule workflow run at 02:00 on Sunday
+  # Schedule workflow run at 03:00 on Sunday
   schedule:
-    - cron: '0 2 * * 0'
+    - cron: '0 3 * * 0'
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -38,12 +38,11 @@ jobs:
       fail-fast: false
       matrix:
         platform:
+        # Cost of multi-arch builds is low with a bundle build - just do it anyways
           - linux/amd64
-          # Release images are multi-arch
-          # Multi-arch works, work through quick bugs first before initial release
-          #- linux/arm64
-          #- linux/ppc64le
-          #- linux/s390x
+          - linux/arm64
+          - linux/ppc64le
+          - linux/s390x
     steps:
       - name: Prepare
         run: |
