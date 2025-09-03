@@ -23,6 +23,9 @@ make docker-build
 make docker-push
 # (or with GitHub actions)
 
+# Run container in the cluster, good for checking RBAC
+make generate install deploy
+
 # Create Operator Bundle
 ```
 

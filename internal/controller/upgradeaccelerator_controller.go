@@ -33,18 +33,14 @@ import (
 	openshiftv1alpha1 "github.com/kenmoini/openshift-upgrade-accelerator-operator/api/v1alpha1"
 )
 
-// +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
-// +kubebuilder:rbac:groups=config.openshift.io,resources=infrastructures,verbs=get;list;watch
-// +kubebuilder:rbac:groups=config.openshift.io,resources=clusteroperators,verbs=get;list;watch
-// +kubebuilder:rbac:groups=config.openshift.io,resources=clusterversions,verbs=get;list;watch
-// +kubebuilder:rbac:groups=config.openshift.io,resources=proxies,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=nodes;configmaps,verbs=get;list;watch
+// +kubebuilder:rbac:groups=config.openshift.io,resources=infrastructures;clusteroperators;clusterversions;proxies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=machineconfiguration.openshift.io,resources=machineconfigpools,verbs=get;list;watch
+// +kubebuilder:rbac:groups=security.openshift.io,namespace=openshift-upgrade-accelerator,resources=securitycontextconstraints,verbs=get;list;watch;use,resourceNames=privileged
 // +kubebuilder:rbac:groups=openshift.kemo.dev,resources=upgradeaccelerators,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=openshift.kemo.dev,resources=upgradeaccelerators/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=openshift.kemo.dev,resources=upgradeaccelerators/finalizers,verbs=update
-// +kubebuilder:rbac:groups=security.openshift.io,namespace=openshift-upgrade-accelerator,resources=securitycontextconstraints,verbs=get;list;watch;use,resourceNames=privileged
-// +kubebuilder:rbac:groups=core,namespace=openshift-upgrade-accelerator,resources=jobs,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,namespace=openshift-upgrade-accelerator,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,namespace=openshift-upgrade-accelerator,resources=jobs;configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,namespace=openshift-upgrade-accelerator,resources=pods,verbs=get;list;watch;delete
 
 func ignoreDeletionPredicate() predicate.Predicate {

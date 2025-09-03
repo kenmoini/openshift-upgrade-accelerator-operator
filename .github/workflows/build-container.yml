@@ -3,6 +3,8 @@ name: Operator - Build Operator Container
 env:
   REGISTRY_HOSTNAME: quay.io
   REGISTRY_IMAGE: quay.io/kenmoini/openshift-upgrade-accelerator-operator
+  CONTAINERFILE_PATH: Dockerfile
+  #BUILD_CONTEXT_PATH: .
 
 on:
   push:
@@ -14,6 +16,7 @@ on:
       - README.md
       - DEV.md
       - .github/dependabot.yml
+      - .github/workflows/**
       - .devcontainer/**
 
   # Schedule workflow run at 02:00 on Sunday
@@ -25,6 +28,9 @@ on:
 
 jobs:
   # Build the container
+  # Check if we can build multi-arch faster
+  # https://learn.arm.com/learning-paths/cross-platform/github-arm-runners/actions/
+  # https://skyworkz.nl/blog/multi-arch-docker-image-10x-faster
   build:
     name: Build Container
     runs-on: ubuntu-latest
@@ -34,9 +40,10 @@ jobs:
       matrix:
         platform:
           - linux/amd64
-          - linux/arm64
-          - linux/ppc64le
-          - linux/s390x
+          # Multi-arch works, work through quick bugs first before initial release
+          #- linux/arm64
+          #- linux/ppc64le
+          #- linux/s390x
     steps:
       - name: Prepare
         run: |
@@ -75,7 +82,7 @@ jobs:
           tags: ${{ env.REGISTRY_IMAGE }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           context: ${{ env.BUILD_CONTEXT_PATH }}
-          file: Dockerfile
+          file: ${{ env.CONTAINERFILE_PATH }}
           labels: ${{ steps.meta.outputs.labels }}
           #push: true
           #provenance: false

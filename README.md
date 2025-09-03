@@ -4,6 +4,11 @@
 ## Description
 // TODO(user): An in-depth paragraph about your project and overview of use
 
+## Features
+
+- Multi-Arch!  x86_64, Arm64, PPC64, x390x
+- Proxy-Aware!
+
 ## Getting Started
 
 ### Prerequisites
