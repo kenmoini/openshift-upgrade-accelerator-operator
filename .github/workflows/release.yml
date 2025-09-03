@@ -217,8 +217,8 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ env.PLATFORM_PAIR }}
-          path: ${{ runner.temp }}/digests/*
+          name: digests-bundle-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/digests-bundle/*
           if-no-files-found: error
           retention-days: 1
 
@@ -232,8 +232,8 @@ jobs:
       - name: Download digests
         uses: actions/download-artifact@v5
         with:
-          path: ${{ runner.temp }}/digests
-          pattern: digests-*
+          path: ${{ runner.temp }}/digests-bundle
+          pattern: digests-bundle-*
           merge-multiple: true
 
       - name: Login to Container Registry
