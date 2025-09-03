@@ -7,16 +7,16 @@ env:
   #BUILD_CONTEXT_PATH: .
 
 on:
-  push:
-    tags:
-      - v*
-    paths-ignore:
-      - README.md
-      - DEV.md
-      - RELEASE.md
-      - .github/dependabot.yml
-      - .github/workflows/**
-      - .devcontainer/**
+  # push:
+  #   tags:
+  #     - v*
+  #   paths-ignore:
+  #     - README.md
+  #     - DEV.md
+  #     - RELEASE.md
+  #     - .github/dependabot.yml
+  #     - .github/workflows/**
+  #     - .devcontainer/**
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:

@@ -7,16 +7,16 @@ env:
   #BUILD_CONTEXT_PATH: .
 
 on:
-  push:
-    tags:
-      - v*
-    paths-ignore:
-      - README.md
-      - DEV.md
-      - RELEASE.md
-      - .github/dependabot.yml
-      - .github/workflows/**
-      - .devcontainer/**
+  # push:
+  #   tags:
+  #     - v*
+  #   paths-ignore:
+  #     - README.md
+  #     - DEV.md
+  #     - RELEASE.md
+  #     - .github/dependabot.yml
+  #     - .github/workflows/**
+  #     - .devcontainer/**
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -35,11 +35,9 @@ jobs:
       matrix:
         platform:
           - linux/amd64
-          # Release images are multi-arch
-          # Multi-arch works, work through quick bugs first before initial release
-          #- linux/arm64
-          #- linux/ppc64le
-          #- linux/s390x
+          - linux/arm64
+          - linux/ppc64le
+          - linux/s390x
     steps:
       - name: Prepare
         run: |
