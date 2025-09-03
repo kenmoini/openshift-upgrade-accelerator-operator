@@ -24,6 +24,8 @@ func (r *UpgradeAcceleratorReconciler) SetupWithManager(mgr ctrl.Manager) error 
 		For(&openshiftv1alpha1.UpgradeAccelerator{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&batchv1.Job{}).
+		// TODO: Check about moving the predicates directly into the Watchers
+		// https://book.kubebuilder.io/reference/watching-resources/predicates-with-watch
 		// Watch for updates to the ClusterVersion and run a reconciliation for all UpgradeAccelerators
 		Watches(&configv1.ClusterVersion{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {

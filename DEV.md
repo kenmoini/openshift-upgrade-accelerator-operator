@@ -27,6 +27,10 @@ make docker-push
 make generate install deploy
 
 # Create Operator Bundle
+# repeat any time changes are made before generation/release
+make generate manifests bundle
+
+
 ```
 
 ```yaml=
