@@ -19,6 +19,9 @@ make lint
 make generate manifests build install run
 
 # Create Operator Image
+make docker-build
+make docker-push
+# (or with GitHub actions)
 
 # Create Operator Bundle
 ```
