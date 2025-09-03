@@ -80,6 +80,8 @@ jobs:
           context: ${{ env.BUILD_CONTEXT_PATH }}
           file: ${{ env.CONTAINERFILE_PATH }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            "VERSION=${{ github.head_ref || github.ref_name }} "
           #push: false
           #provenance: false
           #platforms: linux/amd64, linux/arm64
@@ -137,7 +139,6 @@ jobs:
             type=ref,event=tag
             type=sha,prefix=,suffix=,format=short
             type=sha,prefix=,suffix=,format=long
-            type=raw,value=latest
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
@@ -256,7 +257,6 @@ jobs:
             type=ref,event=tag
             type=sha,prefix=,suffix=,format=short
             type=sha,prefix=,suffix=,format=long
-            type=raw,value=latest
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
