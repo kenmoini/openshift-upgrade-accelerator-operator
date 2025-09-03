@@ -1,0 +1,249 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "openshift.kemo.dev/v1alpha1",
+          "kind": "UpgradeAccelerator",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "openshift-upgrade-accelerator-operator"
+            },
+            "name": "upgradeaccelerator-sample"
+          },
+          "spec": {
+            "parallelism": 5,
+            "prime": true,
+            "selector": {
+              "machineConfigPools": [
+                "master",
+                "worker",
+                "notarealmcp"
+              ],
+              "nodeSelector": {
+                "matchLabels": {
+                  "foo": "bar",
+                  "nvidia.com/gpu.count": "0"
+                }
+              }
+            },
+            "state": "enabled"
+          }
+        }
+      ]
+    capabilities: Basic Install
+    createdAt: "2025-09-03T01:43:23Z"
+    operators.operatorframework.io/builder: operator-sdk-v1.41.1
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+  name: openshift-upgrade-accelerator-operator.v0.0.1
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: UpgradeAccelerator is the Schema for the upgradeaccelerators API.
+      displayName: Upgrade Accelerator
+      kind: UpgradeAccelerator
+      name: upgradeaccelerators.openshift.kemo.dev
+      version: v1alpha1
+  description: The OpenShift Upgrade Accelerator Operator can reduce the time needed
+    for a cluster upgrade by pre-pulling OpenShift Release images to nodes so they
+    are available as soon as scheduling occurs.
+  displayName: OpenShift Upgrade Accelerator
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - nodes
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - config.openshift.io
+          resources:
+          - clusteroperators
+          - clusterversions
+          - infrastructures
+          - proxies
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - machineconfiguration.openshift.io
+          resources:
+          - machineconfigpools
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - openshift.kemo.dev
+          resources:
+          - upgradeaccelerators
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - openshift.kemo.dev
+          resources:
+          - upgradeaccelerators/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - openshift.kemo.dev
+          resources:
+          - upgradeaccelerators/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: ocp-upgrade-accelerator-controller-manager
+      deployments:
+      - label:
+          app.kubernetes.io/managed-by: kustomize
+          app.kubernetes.io/name: openshift-upgrade-accelerator-operator
+          control-plane: controller-manager
+        name: ocp-upgrade-accelerator-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app.kubernetes.io/name: openshift-upgrade-accelerator-operator
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                app.kubernetes.io/name: openshift-upgrade-accelerator-operator
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --metrics-bind-address=:8443
+                - --leader-elect
+                - --health-probe-bind-address=:8081
+                command:
+                - /manager
+                image: quay.io/kenmoini/openshift-upgrade-accelerator-operator:0.0.1
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 128Mi
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+              securityContext:
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
+              serviceAccountName: ocp-upgrade-accelerator-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: ocp-upgrade-accelerator-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - openshift
+  - upgrade
+  - update
+  - accelerator
+  links:
+  - name: Openshift Upgrade Accelerator Operator
+    url: https://openshift-upgrade-accelerator-operator.domain
+  maintainers:
+  - email: ken@kenmoini.com
+    name: Ken Moini
+  maturity: alpha
+  provider:
+    name: Ken Moini
+    url: https://github.com/kenmoini/openshift-upgrade-accelerator-operator
+  version: 0.0.1

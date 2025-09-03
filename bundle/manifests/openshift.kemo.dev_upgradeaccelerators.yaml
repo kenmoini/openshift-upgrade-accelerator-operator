@@ -1,0 +1,343 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: null
+  name: upgradeaccelerators.openshift.kemo.dev
+spec:
+  group: openshift.kemo.dev
+  names:
+    kind: UpgradeAccelerator
+    listKind: UpgradeAcceleratorList
+    plural: upgradeaccelerators
+    singular: upgradeaccelerator
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: UpgradeAccelerator is the Schema for the upgradeaccelerators
+          API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: UpgradeAcceleratorSpec defines the desired state of UpgradeAccelerator.
+            properties:
+              config:
+                description: Config provides some overrides and guidance to the operation
+                  of the UpgradeAccelerator
+                properties:
+                  jobImage:
+                    default: registry.redhat.io/rhel9/support-tools:latest
+                    description: |-
+                      JobImage is the image used for the upgrade jobs.
+                      Defaults to registry.redhat.io/rhel9/support-tools:latest
+                    type: string
+                  overrideReleaseVersion:
+                    description: OverrideReleaseVersion allows for specifying a different
+                      release version to be pulled.
+                    properties:
+                      image:
+                        type: string
+                      version:
+                        type: string
+                    type: object
+                  pullScriptConfigMapName:
+                    description: |-
+                      PullScriptConfigMapName is the name of the ConfigMap containing the pull script.
+                      If specified the operator will skip creating its own and use the defined one for Jobs.
+                    type: string
+                  randomWait:
+                    description: RandomWait allows for adding a random wait time before
+                      starting the image pulling.
+                    properties:
+                      enabled:
+                        default: true
+                        description: Enabled indicates whether random wait is enabled.
+                        type: boolean
+                      maxDuration:
+                        default: 30
+                        description: MaxDuration is the maximum wait duration in seconds.
+                        format: int32
+                        type: integer
+                      minDuration:
+                        default: 10
+                        description: MinDuration is the minimum wait duration in seconds.
+                        format: int32
+                        type: integer
+                    type: object
+                  scheduling:
+                    description: Scheduling allows for overriding the default tolerations,
+                      namespace Jobs are created in, etc.
+                    properties:
+                      namespace:
+                        description: |-
+                          Namespace is the namespace in which the Jobs are created.
+                          By default the Jobs are created in the openshift-upgrade-accelerator namespace.
+                          If you specify a different namespace you will need to give permissions to the
+                          ServiceAccount used by the UpgradeAccelerator controller to manage ConfigMaps/Jobs/Pods.
+                        type: string
+                      tolerations:
+                        description: |-
+                          Tolerations is an array of tolerations for the Jobs created by the UpgradeAccelerator
+                          By default the Jobs created will tolerate all taints.
+                        items:
+                          description: |-
+                            The pod this Toleration is attached to tolerates any taint that matches
+                            the triple <key,value,effect> using the matching operator <operator>.
+                          properties:
+                            effect:
+                              description: |-
+                                Effect indicates the taint effect to match. Empty means match all taint effects.
+                                When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                              type: string
+                            key:
+                              description: |-
+                                Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                                If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                              type: string
+                            operator:
+                              description: |-
+                                Operator represents a key's relationship to the value.
+                                Valid operators are Exists and Equal. Defaults to Equal.
+                                Exists is equivalent to wildcard for value, so that a pod can
+                                tolerate all taints of a particular category.
+                              type: string
+                            tolerationSeconds:
+                              description: |-
+                                TolerationSeconds represents the period of time the toleration (which must be
+                                of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                                it is not set, which means tolerate the taint forever (do not evict). Zero and
+                                negative values will be treated as 0 (evict immediately) by the system.
+                              format: int64
+                              type: integer
+                            value:
+                              description: |-
+                                Value is the taint value the toleration matches to.
+                                If the operator is Exists, the value should be empty, otherwise just a regular string.
+                              type: string
+                          type: object
+                        type: array
+                    type: object
+                type: object
+              parallelism:
+                default: 5
+                description: |-
+                  Parallelism defines the number of nodes to upgrade in parallel.
+                  Default is 5.  If set to 0, all nodes will be upgraded in parallel.
+                format: int32
+                type: integer
+              prime:
+                default: true
+                description: Prime indicates whether to pull images to a single node
+                  first before rolling out to other nodes.
+                type: boolean
+              selector:
+                description: Selector defines the selection criteria for nodes to
+                  which the upgrade accelerator applies.
+                properties:
+                  machineConfigPools:
+                    description: MachineConfigPools is a list of MachineConfigPools
+                      to target.
+                    items:
+                      type: string
+                    type: array
+                  nodeSelector:
+                    description: NodeSelector is a selector which must be true for
+                      the pod to fit on a node.
+                    properties:
+                      matchExpressions:
+                        description: matchExpressions is a list of label selector
+                          requirements. The requirements are ANDed.
+                        items:
+                          description: |-
+                            A label selector requirement is a selector that contains values, a key, and an operator that
+                            relates the key and values.
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: |-
+                                operator represents a key's relationship to a set of values.
+                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: |-
+                                values is an array of string values. If the operator is In or NotIn,
+                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced during a strategic
+                                merge patch.
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
+                      matchLabels:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                          map is equivalent to an element of matchExpressions, whose key field is "key", the
+                          operator is "In", and the values array contains only "value". The requirements are ANDed.
+                        type: object
+                    type: object
+                    x-kubernetes-map-type: atomic
+                type: object
+              state:
+                default: enabled
+                description: State indicates whether the upgrade accelerator is enabled
+                  or disabled.
+                type: string
+            type: object
+          status:
+            description: UpgradeAcceleratorStatus defines the observed state of UpgradeAccelerator.
+            properties:
+              clusterInfrastructure:
+                description: ClusterInfrastructure indicates the detected infrastructure
+                  type of the cluster.
+                type: string
+              conditions:
+                description: Conditions represents the latest available observations
+                  of the UpgradeAccelerator's current state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              currentVersion:
+                description: CurrentVersion indicates the current version of OpenShift.  This
+                  is derived from the machine-config ClusterOperator.
+                type: string
+              desiredImage:
+                description: DesiredImage is the desired release image for the UpgradeAccelerator.
+                type: string
+              desiredVersion:
+                description: |-
+                  DesiredVersion indicates the desired version of OpenShift that the UpgradeAccelerator is trying to achieve.
+                  This is either inferred from the cluster via the TargetVersion if it does not match the CurrentVersion
+                  Or it is provided as a status for the config override
+                type: string
+              lastCompletedVersion:
+                description: LastCompletedVersion indicates the last completed version
+                  of OpenShift releases pulled.
+                type: string
+              nodesPreheated:
+                description: NodesPreheated is a list of nodes that have been preheated
+                  with the targetVersion release images.
+                items:
+                  type: string
+                type: array
+              nodesSelected:
+                description: NodesSelected is a list of nodes that match the selector
+                  criteria.
+                items:
+                  type: string
+                type: array
+              nodesWaiting:
+                description: NodesWaiting is a list of nodes that are waiting to be
+                  preheated with the targetVersion release images.
+                items:
+                  type: string
+                type: array
+              nodesWarming:
+                description: NodesWarming is a list of nodes that are currently being
+                  preheated with the targetVersion release images.
+                items:
+                  type: string
+                type: array
+              primerNodes:
+                description: PrimerNodes are a list of Nodes that are scheduled to
+                  pull first before others
+                items:
+                  type: string
+                type: array
+              targetVersion:
+                description: TargetVersion indicates the target version of OpenShift
+                  that is reported by the ClusterVersion CR.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

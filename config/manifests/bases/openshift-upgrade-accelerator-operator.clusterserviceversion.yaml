@@ -1,0 +1,53 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: openshift-upgrade-accelerator-operator.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: UpgradeAccelerator is the Schema for the upgradeaccelerators API.
+      displayName: Upgrade Accelerator
+      kind: UpgradeAccelerator
+      name: upgradeaccelerators.openshift.kemo.dev
+      version: v1alpha1
+  description: The OpenShift Upgrade Accelerator Operator can reduce the time needed
+    for a cluster upgrade by pre-pulling OpenShift Release images to nodes so they
+    are available as soon as scheduling occurs.
+  displayName: OpenShift Upgrade Accelerator
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - openshift
+  - upgrade
+  - update
+  - accelerator
+  links:
+  - name: Openshift Upgrade Accelerator Operator
+    url: https://openshift-upgrade-accelerator-operator.domain
+  maintainers:
+  - email: ken@kenmoini.com
+    name: Ken Moini
+  provider:
+    name: Ken Moini
+    url: https://github.com/kenmoini/openshift-upgrade-accelerator-operator
+  maturity: alpha
+  version: 0.0.0
