@@ -211,18 +211,41 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 		targetedNodes = sortSliceOfStrings(targetedNodes)
 	}
 
+	// Set Primer Nodes
+	targetedNodes, primerNodes = determinePrimerNodes(upgradeAccelerator, logger, targetedNodes, prohibitedNodes, primerNodes, primingProhibitedNodes)
+
+	// This function should return a configured state idempotent list of nodes
+	// Sort the prohibitedNodes, primerNodes, and primingProhibitedNodes if they're not empty
+	if len(prohibitedNodes) > 1 {
+		prohibitedNodes = sortSliceOfStrings(prohibitedNodes)
+	}
+	if len(primerNodes) > 1 {
+		primerNodes = sortSliceOfStrings(primerNodes)
+	}
+	if len(primingProhibitedNodes) > 1 {
+		primingProhibitedNodes = sortSliceOfStrings(primingProhibitedNodes)
+	}
+
+	// Size determination and status checks are completed external to this function on the consuming end
+	return targetedNodes, prohibitedNodes, primerNodes, primingProhibitedNodes, nil
+}
+
+// determinePrimerNodes sets the final determined primer and target nodes
+func determinePrimerNodes(upgradeAccelerator *openshiftv1alpha1.UpgradeAccelerator, logger *logr.Logger,
+	targetedNodes []string, prohibitedNodes []string, primerNodes []string, primingProhibitedNodes []string) ([]string, []string) {
+
 	// Check if priming is even enabled
 	if upgradeAccelerator.Spec.Prime {
 		// Priming is set as a functional state
 		// It toggles the priming functionality entirely, even if nodes are manually specified to be primed
-		logger.Info("determineTargetedNodes: Priming is enabled")
+		logger.Info("determinePrimerNodes: Priming is enabled")
 		// Check if there are currently defined primerNodes and any targetedNodes
 		if len(targetedNodes) > 0 {
 			if len(primerNodes) == 0 {
 				// If not we should loop through the list of sorted targetedNodes
-				// and pick the first one alphabetically if it's not part of the primingProhibitedNodes list
+				// and pick the first one alphabetically if it's not part of the prohibitedNodes/primingProhibitedNodes list
 				for _, nodeName := range targetedNodes {
-					if !slices.Contains(primingProhibitedNodes, nodeName) {
+					if !slices.Contains(primingProhibitedNodes, nodeName) && !slices.Contains(prohibitedNodes, nodeName) {
 						primerNodes = append(primerNodes, nodeName)
 						break
 					}
@@ -231,7 +254,7 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 				// Make sure the manually defined primerNodes are in the targetedNodes list, and if not add it
 				// Discount double check!
 				for _, prmrNode := range primerNodes {
-					if !slices.Contains(targetedNodes, prmrNode) {
+					if !slices.Contains(targetedNodes, prmrNode) && !slices.Contains(primingProhibitedNodes, prmrNode) && !slices.Contains(prohibitedNodes, prmrNode) {
 						targetedNodes = append(targetedNodes, prmrNode)
 					}
 				}
@@ -252,18 +275,5 @@ func (r *UpgradeAcceleratorReconciler) determineTargetedNodes(ctx context.Contex
 		primerNodes = []string{}
 	}
 
-	// This function should return a configured state idempotent list of nodes
-	// Sort the prohibitedNodes, primerNodes, and primingProhibitedNodes if they're not empty
-	if len(prohibitedNodes) > 1 {
-		prohibitedNodes = sortSliceOfStrings(prohibitedNodes)
-	}
-	if len(primerNodes) > 1 {
-		primerNodes = sortSliceOfStrings(primerNodes)
-	}
-	if len(primingProhibitedNodes) > 1 {
-		primingProhibitedNodes = sortSliceOfStrings(primingProhibitedNodes)
-	}
-
-	// Size determination and status checks are completed external to this function on the consuming end
-	return targetedNodes, prohibitedNodes, primerNodes, primingProhibitedNodes, nil
+	return targetedNodes, primerNodes
 }
