@@ -29,6 +29,7 @@ type PullJob struct {
 	ReleaseConfigMapName string `json:"releaseConfigMapName,omitempty"`
 }
 
+// nolint: unused
 func (r *UpgradeAcceleratorReconciler) getCompletedJobNodeList(ctx context.Context, upgradeAcceleratorName string,
 	releaseVersion string) (completedNodes []string, err error) {
 	jobList := batchv1.JobList{}
@@ -104,6 +105,7 @@ func (r *UpgradeAcceleratorReconciler) createPullJob(ctx context.Context, upgrad
 	logger.Info("Proxy Environment Variables: ", "vars", envProxyConfig)
 	baseEnvVars = append(baseEnvVars, envProxyConfig...)
 
+	// nolint: gofmt // No clue why the formatting is off according to lint, it looks beautiful
 	jobConstructor := &batchv1.Job{
 		ObjectMeta: jobMetadata,
 		Spec: batchv1.JobSpec{

@@ -15,8 +15,12 @@ make generate
 make manifests
 make lint
 
+# Local dev
 make generate manifests build install run
-make build run
+
+# Create Operator Image
+
+# Create Operator Bundle
 ```
 
 ```yaml=
