@@ -1,5 +1,8 @@
-# openshift-upgrade-accelerator-operator
-// TODO(user): Add simple overview of use/purpose
+# OpenShift Upgrade Accelerator Operator
+
+> This is a community operator, unsupported by Red Hat.  Support is tired of hearing about me.
+
+The OpenShift Upgrade Accelerator Operator reduces the time required for OpenShift upgrades by pre-pulling release images onto Nodes - this way they're ready as soon as the Pod is ready to be scheduled, and the Upgrade can progress through its states faster.
 
 ## Description
 // TODO(user): An in-depth paragraph about your project and overview of use

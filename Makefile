@@ -208,6 +208,9 @@ endif
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply -f -
 
+.PHONY: dev-sync
+dev-sync: generate manifests build lint bundle ## Sync dev changes
+
 .PHONY: uninstall
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
@@ -305,6 +308,10 @@ else
 OPERATOR_SDK = $(shell which operator-sdk)
 endif
 endif
+
+
+.PHONY: release
+release: generate manifests bundle ## Generate bundle manifests and metadata, then validate generated files.
 
 .PHONY: bundle
 bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.

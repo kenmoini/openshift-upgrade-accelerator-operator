@@ -39,7 +39,7 @@ metadata:
       Cloud Provider,Management,OpenShift Optional,Storage
     certified: "false"
     containerImage: quay.io/kenmoini/openshift-upgrade-accelerator-operator:latest
-    createdAt: "2025-09-03T03:31:18Z"
+    createdAt: "2025-09-03T06:50:12Z"
     description: Get faster upgrades by pre-pulling OpenShift Release images to nodes
       so they are available as soon as scheduling occurs.
     features.operators.openshift.io/cnf: "false"
@@ -54,10 +54,10 @@ metadata:
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
   labels:
     operatorframework.io/arch.amd64: supported
-    operatorframework.io/os.linux: supported
     operatorframework.io/arch.arm64: supported
     operatorframework.io/arch.ppc64le: supported
     operatorframework.io/arch.s390x: supported
+    operatorframework.io/os.linux: supported
     operatorframework.io/os.zos: supported
   name: openshift-upgrade-accelerator-operator.v0.0.1
   namespace: placeholder

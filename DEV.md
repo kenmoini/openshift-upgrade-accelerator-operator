@@ -18,6 +18,9 @@ make lint
 # Local dev
 make generate manifests build install run
 
+# On updates
+make dev-sync
+
 # Create Operator Image
 make docker-build
 make docker-push
@@ -30,7 +33,10 @@ make generate install deploy
 # repeat any time changes are made before generation/release
 make generate manifests bundle
 
+# Operator Catalog is managed externally at github.com/kenmoini/openshift-operator-catalog
 
+# Clean up
+make undeploy uninstall
 ```
 
 ```yaml=
