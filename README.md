@@ -1,5 +1,7 @@
 # OpenShift Upgrade Accelerator Operator
 
+[![Lint](https://github.com/kenmoini/openshift-upgrade-accelerator-operator/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/kenmoini/openshift-upgrade-accelerator-operator/actions/workflows/lint.yml) [![Tests](https://github.com/kenmoini/openshift-upgrade-accelerator-operator/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/kenmoini/openshift-upgrade-accelerator-operator/actions/workflows/test.yml) [![Operator - Build](https://github.com/kenmoini/openshift-upgrade-accelerator-operator/actions/workflows/build-container.yml/badge.svg)](https://github.com/kenmoini/openshift-upgrade-accelerator-operator/actions/workflows/build-container.yml) [![Bundle - Build](https://github.com/kenmoini/openshift-upgrade-accelerator-operator/actions/workflows/build-bundle.yml/badge.svg)](https://github.com/kenmoini/openshift-upgrade-accelerator-operator/actions/workflows/build-bundle.yml)
+
 > This is a community operator, unsupported by Red Hat.  Support is tired of hearing about me.
 
 The OpenShift Upgrade Accelerator Operator reduces the time required for OpenShift upgrades by pre-pulling release images onto Nodes - this way they're ready as soon as the Pod is ready to be scheduled, and the Upgrade can progress through its states faster.
