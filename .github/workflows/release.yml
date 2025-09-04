@@ -232,7 +232,7 @@ jobs:
       - name: Download digests
         uses: actions/download-artifact@v5
         with:
-          path: ${{ runner.temp }}/digests-bundle
+          path: ${{ runner.temp }}/digests
           pattern: digests-bundle-*
           merge-multiple: true
 
