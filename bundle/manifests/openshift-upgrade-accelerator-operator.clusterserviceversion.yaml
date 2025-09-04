@@ -39,7 +39,7 @@ metadata:
       Cloud Provider,Management,OpenShift Optional,Storage
     certified: "false"
     containerImage: quay.io/kenmoini/openshift-upgrade-accelerator-operator:latest
-    createdAt: "2025-09-04T05:05:56Z"
+    createdAt: "2025-09-04T05:07:19Z"
     description: Get faster upgrades by pre-pulling OpenShift Release images to nodes
       so they are available as soon as scheduling occurs.
     features.operators.openshift.io/cnf: "false"
@@ -59,7 +59,7 @@ metadata:
     operatorframework.io/arch.s390x: supported
     operatorframework.io/os.linux: supported
     operatorframework.io/os.zos: supported
-  name: openshift-upgrade-accelerator-operator.v0.0.1
+  name: openshift-upgrade-accelerator-operator.v0.0.2
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -193,7 +193,7 @@ spec:
                 - --health-probe-bind-address=:8081
                 command:
                 - /manager
-                image: quay.io/kenmoini/openshift-upgrade-accelerator-operator:v0.0.1
+                image: quay.io/kenmoini/openshift-upgrade-accelerator-operator:v0.0.2
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -285,4 +285,4 @@ spec:
   provider:
     name: Ken Moini
     url: https://github.com/kenmoini/openshift-upgrade-accelerator-operator
-  version: 0.0.1
+  version: 0.0.2
