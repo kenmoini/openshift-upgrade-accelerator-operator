@@ -39,7 +39,7 @@ metadata:
       Cloud Provider,Management,OpenShift Optional,Storage
     certified: "false"
     containerImage: quay.io/kenmoini/openshift-upgrade-accelerator-operator:latest
-    createdAt: "2025-09-04T03:35:34Z"
+    createdAt: "2025-09-04T05:05:56Z"
     description: Get faster upgrades by pre-pulling OpenShift Release images to nodes
       so they are available as soon as scheduling occurs.
     features.operators.openshift.io/cnf: "false"
