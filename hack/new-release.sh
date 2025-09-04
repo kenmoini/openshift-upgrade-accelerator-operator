@@ -27,12 +27,15 @@ shift $((OPTIND - 1))
 
 NEW_VERSION="$1"
 
+# Checkout the release branch
+git checkout -b release/v${NEW_VERSION} main
+
 # Replace the VERSION in the Makefile
 sed -i.bak "s/^VERSION ?= .*/VERSION ?= ${NEW_VERSION}/" Makefile
 
 # Commit the changes
 git add Makefile
-git commit -m "Release version ${NEW_VERSION}"
+git commit -m "RELEASE: Makefile version ${NEW_VERSION}"
 
 # Make the release manifests
 make release
@@ -40,7 +43,7 @@ make release
 # Add the changes
 git add bundle/
 git add config/
-git commit -m "Update release manifests for version ${NEW_VERSION}"
+git commit -m "RELEASE: Manifests version ${NEW_VERSION}"
 
 # Create a new tag
 if [ "$FORCE" = true ]; then
@@ -50,4 +53,9 @@ else
 fi
 
 # Push the changes
-git push origin v${NEW_VERSION}
+
+if [ "$FORCE" = true ]; then
+  git push origin v${NEW_VERSION} --force
+else
+  git push origin v${NEW_VERSION}
+fi
