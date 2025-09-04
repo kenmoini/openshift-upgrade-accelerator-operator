@@ -1,5 +1,9 @@
 name: Operator - Build Operator Container
 
+# The API requires write permission on the repository to submit dependencies
+permissions:
+  contents: write
+
 env:
   REGISTRY_HOSTNAME: quay.io
   REGISTRY_IMAGE: quay.io/kenmoini/openshift-upgrade-accelerator-operator
@@ -26,6 +30,42 @@ on:
   workflow_dispatch:
 
 jobs:
+  test-and-tap:
+    name: Run tests and submit dependencies for TAP
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v5
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ">=1.24.0"
+          go-version-file: go.mod
+
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.1.0
+
+      - name: Run snapshot action to submit dependencies
+        uses: actions/go-dependency-submission@v2
+        with:
+          # Required: Define the repo path to the go.mod file used by the
+          # build target
+          go-mod-path: go.mod
+          #
+          # Optional: Define the path of a build target (a file with a
+          # `main()` function) If not defined, this Action will collect all
+          # dependencies used by all build targets for the module, which may
+          # include Go dependencies used by tests and tooling.
+          go-build-target: cmd/main.go
+
+      - name: Running Tests
+        run: |
+          go mod tidy
+          make test
+
   # Build the container
   # Check if we can build multi-arch faster
   # https://learn.arm.com/learning-paths/cross-platform/github-arm-runners/actions/
@@ -34,12 +74,14 @@ jobs:
     name: Build Container
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    needs:
+      - test-and-tap
     strategy:
       fail-fast: false
       matrix:
         platform:
           - linux/amd64
-          # Release images are multi-arch
+          # Release images are multi-arch - this workflow just builds main for integration
           # Multi-arch works, work through quick bugs first before initial release
           #- linux/arm64
           #- linux/ppc64le
@@ -107,6 +149,7 @@ jobs:
           retention-days: 1
 
   merge:
+    name: Create and Push Manifest List
     runs-on: ubuntu-latest
     needs:
       - build
