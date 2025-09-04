@@ -1,3 +1,5 @@
+# This workflow is only manually run
+# It can run an at-time rebuild of the operator container
 name: Release - Build Operator Container
 
 env:

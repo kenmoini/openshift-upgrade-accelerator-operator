@@ -193,3 +193,9 @@ jobs:
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
+
+      - name: Container Dependency Submission Action
+        uses: GeekMasher/container-dependency-submission-action@main
+        with:
+          # `container` is the name of the container already built on the system
+          container: "${{ env.REGISTRY_IMAGE }}:latest"

@@ -1,3 +1,5 @@
+# This workflow is what releases a versioned package of the Operator and the Operator Bundle
+# It is triggered on pushes to tags that start with the letter v
 name: Release - Operator & Bundle
 
 env:
