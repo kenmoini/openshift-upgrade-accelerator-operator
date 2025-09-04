@@ -55,7 +55,9 @@ fi
 # Push the changes
 
 if [ "$FORCE" = true ]; then
+  git push origin release/v${NEW_VERSION} --force
   git push origin v${NEW_VERSION} --force
 else
+  git push origin release/v${NEW_VERSION}
   git push origin v${NEW_VERSION}
 fi
