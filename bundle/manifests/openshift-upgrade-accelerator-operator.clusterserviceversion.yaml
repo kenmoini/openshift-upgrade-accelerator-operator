@@ -39,7 +39,7 @@ metadata:
       Cloud Provider,Management,OpenShift Optional,Storage
     certified: "false"
     containerImage: quay.io/kenmoini/openshift-upgrade-accelerator-operator:latest
-    createdAt: "2025-09-03T06:50:12Z"
+    createdAt: "2025-09-04T02:55:14Z"
     description: Get faster upgrades by pre-pulling OpenShift Release images to nodes
       so they are available as soon as scheduling occurs.
     features.operators.openshift.io/cnf: "false"
@@ -192,7 +192,7 @@ spec:
                 - --health-probe-bind-address=:8081
                 command:
                 - /manager
-                image: quay.io/kenmoini/openshift-upgrade-accelerator-operator:0.0.1
+                image: quay.io/kenmoini/openshift-upgrade-accelerator-operator:v0.0.1
                 livenessProbe:
                   httpGet:
                     path: /healthz
