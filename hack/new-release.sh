@@ -27,13 +27,6 @@ shift $((OPTIND - 1))
 
 NEW_VERSION="$1"
 
-# Create a new branch
-if [ "$FORCE" = true ]; then
-  git tag v${NEW_VERSION} --force
-else
-  git tag v${NEW_VERSION}
-fi
-
 # Replace the VERSION in the Makefile
 sed -i.bak "s/^VERSION ?= .*/VERSION ?= ${NEW_VERSION}/" Makefile
 
@@ -48,6 +41,13 @@ make release
 git add bundle/
 git add config/
 git commit -m "Update release manifests for version ${NEW_VERSION}"
+
+# Create a new tag
+if [ "$FORCE" = true ]; then
+  git tag v${NEW_VERSION} --force
+else
+  git tag v${NEW_VERSION}
+fi
 
 # Push the changes
 git push origin v${NEW_VERSION}
