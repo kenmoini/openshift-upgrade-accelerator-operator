@@ -27,8 +27,15 @@ shift $((OPTIND - 1))
 
 NEW_VERSION="$1"
 
+# Reset to main
+git checkout main
+
 # Checkout the release branch
-git checkout -b release/v${NEW_VERSION} main
+if [ "$FORCE" = true ]; then
+  git checkout -b release/v${NEW_VERSION} main --force
+else
+  git checkout -b release/v${NEW_VERSION} main
+fi
 
 # Replace the VERSION in the Makefile
 sed -i.bak "s/^VERSION ?= .*/VERSION ?= ${NEW_VERSION}/" Makefile
@@ -62,4 +69,5 @@ else
   git push origin v${NEW_VERSION}
 fi
 
+# Reset to main
 git checkout main
