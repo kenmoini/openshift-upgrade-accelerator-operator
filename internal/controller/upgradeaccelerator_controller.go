@@ -33,7 +33,7 @@ import (
 	openshiftv1alpha1 "github.com/kenmoini/openshift-upgrade-accelerator-operator/api/v1alpha1"
 )
 
-// +kubebuilder:rbac:groups=core,resources=nodes;configmaps,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=nodes;configmaps;jobs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=config.openshift.io,resources=infrastructures;clusteroperators;clusterversions;proxies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=machineconfiguration.openshift.io,resources=machineconfigpools,verbs=get;list;watch
 // +kubebuilder:rbac:groups=security.openshift.io,namespace=openshift-upgrade-accelerator,resources=securitycontextconstraints,verbs=get;list;watch;use,resourceNames=privileged
