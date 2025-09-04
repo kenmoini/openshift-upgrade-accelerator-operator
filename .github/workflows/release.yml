@@ -37,9 +37,9 @@ jobs:
       matrix:
         platform:
           - linux/amd64
-          - linux/arm64
-          - linux/ppc64le
-          - linux/s390x
+          #- linux/arm64
+          #- linux/ppc64le
+          #- linux/s390x
     steps:
       - name: Prepare
         run: |
@@ -81,7 +81,7 @@ jobs:
           file: ${{ env.CONTAINERFILE_PATH }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            "VERSION=${{ github.head_ref || github.ref_name }} "
+            "VERSION=${{ github.head_ref || github.ref_name }}"
           #push: false
           #provenance: false
           #platforms: linux/amd64, linux/arm64
@@ -135,7 +135,6 @@ jobs:
           images: ${{ env.REGISTRY_IMAGE }}
           tags: |
             type=schedule
-            type=ref,event=branch
             type=ref,event=tag
             type=sha,prefix=,suffix=,format=short
             type=sha,prefix=,suffix=,format=long
@@ -164,9 +163,9 @@ jobs:
       matrix:
         platform:
           - linux/amd64
-          - linux/arm64
-          - linux/ppc64le
-          - linux/s390x
+          #- linux/arm64
+          #- linux/ppc64le
+          #- linux/s390x
     steps:
       - name: Prepare
         run: |
@@ -253,7 +252,6 @@ jobs:
           images: ${{ env.BUNDLE_REGISTRY_IMAGE }}
           tags: |
             type=schedule
-            type=ref,event=branch
             type=ref,event=tag
             type=sha,prefix=,suffix=,format=short
             type=sha,prefix=,suffix=,format=long
