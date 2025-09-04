@@ -1,4 +1,14 @@
+# Development
 
+## Prerequisites
+
+- Go version v1.24.0+
+- Docker version 17.03+.
+- or Podman version 4+
+- kubectl version v1.11.3+.
+- Access to a Kubernetes v1.11.3+/OpenShift 4.8+ cluster.
+
+## Development Hints and Steps
 
 ```bash=
 GOPROXY=direct GOSUMDB=off operator-sdk init --domain kemo.dev --repo github.com/kenmoini/openshift-upgrade-accelerator-operator

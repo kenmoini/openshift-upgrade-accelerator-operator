@@ -7,121 +7,44 @@
 The OpenShift Upgrade Accelerator Operator reduces the time required for OpenShift upgrades by pre-pulling release images onto Nodes - this way they're ready as soon as the Pod is ready to be scheduled, and the Upgrade can progress through its states faster.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+
+During an OpenShift upgrade, there are numerous processes that need to occur in the right order.  API, etcd, kubelet, etc updates - then to node reboots - then to waiting for various ClusterOperators to come online.
+
+A significant portion of the wait time during the upgrade process is spent in waiting for images to pull.  This delay can cause reconciliation loops with increasing back-off times while the images are pulled.
+
+The OpenShift Upgrade Accelerator Operator aims to speed up the upgrade process by pulling images down to nodes before they're needed.  This way, the images are present on the nodes as soon as scheduling occurs.
+
+The default event trigger is when the ClusterVersion changes to a new release.  The desired release is determined, the images from that release are pulled preemptively.
 
 ## Features
 
 - Multi-Arch!  x86_64, Arm64, PPC64, x390x
+- Disconnected mirroring support!
 - Proxy-Aware!
+- Primer Nodes - Pull release images to a single or set of nodes first before progressing to other nodes.  Useful when leveraging a local pull-through/proxy cache container image registry.
+- Node Exclusions - Disable nodes from being randomly selected as a primer node, or from being processed at all.
+- Manual release image overrides - Pre-prime images before an upgrade is even started, or pull a release from a difference build/source.
 
 ## Getting Started
 
-### Prerequisites
-- go version v1.24.0+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
+To deploy this Operator in OpenShift, the easiest way to do so is by adding the Operator's CatalogSource to the cluster.  By doing so, the Operator will show up in the OperatorHub like any other Operator, and can be installed with traditional OperatorGroup/Subscription/InstallPlan/etc manifests.
 
-### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
-
-```sh
-make docker-build docker-push IMG=<some-registry>/openshift-upgrade-accelerator-operator:tag
+```bash
+# Deploy the CatalogSource
+oc apply -k https://github.com/kenmoini/openshift-operator-catalog/deploy/overlays/stable/
 ```
-
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
-
-**Install the CRDs into the cluster:**
-
-```sh
-make install
-```
-
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
-
-```sh
-make deploy IMG=<some-registry>/openshift-upgrade-accelerator-operator:tag
-```
-
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
-
-**Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
-
-```sh
-kubectl apply -k config/samples/
-```
-
->**NOTE**: Ensure that the samples has default values to test it out.
-
-### To Uninstall
-**Delete the instances (CRs) from the cluster:**
-
-```sh
-kubectl delete -k config/samples/
-```
-
-**Delete the APIs(CRDs) from the cluster:**
-
-```sh
-make uninstall
-```
-
-**UnDeploy the controller from the cluster:**
-
-```sh
-make undeploy
-```
-
-## Project Distribution
-
-Following the options to release and provide this solution to the users.
-
-### By providing a bundle with all YAML files
-
-1. Build the installer for the image built and published in the registry:
-
-```sh
-make build-installer IMG=<some-registry>/openshift-upgrade-accelerator-operator:tag
-```
-
-**NOTE:** The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without its
-dependencies.
-
-2. Using the installer
-
-Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
-the project, i.e.:
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/openshift-upgrade-accelerator-operator/<tag or branch>/dist/install.yaml
-```
-
-### By providing a Helm Chart
-
-1. Build the chart using the optional helm plugin
-
-```sh
-operator-sdk edit --plugins=helm/v1-alpha
-```
-
-2. See that a chart was generated under 'dist/chart', and users
-can obtain this solution from there.
-
-**NOTE:** If you change the project, you need to update the Helm Chart
-using the same command above to sync the latest changes. Furthermore,
-if you create webhooks, you need to use the above command with
-the '--force' flag and manually ensure that any custom configuration
-previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
-is manually re-applied afterwards.
 
 ## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
+
+A good way to contribute to this project is to check out the current open Issues and Pull Requests for anything that is currently in-flight.
+
+Any bugs, enhancements, etc should be started with an Issue first to make discussion available over the impact of the request.
+
+Once an Issue is open to track the discussion, you can optionally provide contributions with Pull Requests.
+
+To do so, fork this repo, then make a new branch in your fork to track changes.  Commit them to that branch, push to your fork, and then open a Pull Request from there to merge into `main` which is the primary branch.
+
+Once changes have been merged into main, a versioned release can occur to distribute it and other changes.
 
 **NOTE:** Run `make help` for more information on all potential `make` targets
 
