@@ -61,3 +61,5 @@ else
   git push origin release/v${NEW_VERSION}
   git push origin v${NEW_VERSION}
 fi
+
+git checkout main
