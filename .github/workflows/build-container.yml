@@ -40,7 +40,6 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: ">=1.24.0"
           go-version-file: go.mod
 
       - name: Run linter
@@ -194,9 +193,14 @@ jobs:
         run: |
           docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
 
-      - name: Container Dependency Submission Action
-        uses: GeekMasher/container-dependency-submission-action@main
+      - name: Generate SBOM for container image
+        uses: anchore/sbom-action@v0.20.5
         with:
-          # `container` is the name of the container already built on the system
-          container: "${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}"
-          token: ${{ secrets.GITHUB_TOKEN }}
+          image: ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
+          dependency-snapshot: true
+      #- name: Container Dependency Submission Action
+      #  uses: GeekMasher/container-dependency-submission-action@main
+      #  with:
+      #    # `container` is the name of the container already built on the system
+      #    container: ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
+      #    token: ${{ secrets.GITHUB_TOKEN }}
