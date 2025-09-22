@@ -194,7 +194,7 @@ jobs:
           docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
 
       - name: Generate SBOM for container image
-        uses: anchore/sbom-action@v0.20.5
+        uses: anchore/sbom-action@v0.20.6
         with:
           image: ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
           dependency-snapshot: true
