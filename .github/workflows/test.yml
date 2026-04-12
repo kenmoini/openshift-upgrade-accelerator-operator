@@ -10,14 +10,15 @@ on:
       - .github/dependabot.yml
       - .github/workflows/**
       - .devcontainer/**
-  pull_request:
-    paths-ignore:
-      - README.md
-      - DEV.md
-      - RELEASE.md
-      - .github/dependabot.yml
-      - .github/workflows/**
-      - .devcontainer/**
+  # Disable pull_request to prevent malicious PRs
+  # pull_request:
+  #   paths-ignore:
+  #     - README.md
+  #     - DEV.md
+  #     - RELEASE.md
+  #     - .github/dependabot.yml
+  #     - .github/workflows/**
+  #     - .devcontainer/**
 
 jobs:
   test:
